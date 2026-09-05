@@ -1,0 +1,52 @@
+diff --git a/providers/dns/timewebcloud/timewebcloud.go b/providers/dns/timewebcloud/timewebcloud.go
+index 8d55d67..471e688 100644
+--- a/providers/dns/timewebcloud/timewebcloud.go
++++ b/providers/dns/timewebcloud/timewebcloud.go
+@@ -105,20 +105,19 @@ func (d *DNSProvider) Timeout() (timeout, interval time.Duration) {
+ func (d *DNSProvider) Present(domain, token, keyAuth string) error {
+ 	info := dns01.GetChallengeInfo(domain, keyAuth)
+ 
+-	authZone, err := dns01.FindZoneByFqdn(info.EffectiveFQDN)
++	_, err := dns01.FindZoneByFqdn(info.EffectiveFQDN)
+ 	if err != nil {
+ 		return fmt.Errorf("timewebcloud: could not find zone for domain %q: %w", domain, err)
+ 	}
+ 
+-	record := internal.DNSRecord{
+-		Type:      "TXT",
+-		Value:     info.Value,
+-		SubDomain: dns01.UnFqdn(info.EffectiveFQDN),
++	record := internal.DNSRecordRequest{
++		Type:  "TXT",
++		Value: info.Value,
+ 	}
+ 
+-	response, err := d.client.CreateRecord(context.Background(), authZone, record)
++	response, err := d.client.CreateRecord(context.Background(), info.EffectiveFQDN, record)
+ 	if err != nil {
+-		return fmt.Errorf("timewebcloud: %w", err)
++		return fmt.Errorf("timewebcloud: create record: %w", err)
+ 	}
+ 
+ 	d.recordIDsMu.Lock()
+@@ -132,7 +131,7 @@ func (d *DNSProvider) Present(domain, token, keyAuth string) error {
+ func (d *DNSProvider) CleanUp(domain, token, keyAuth string) error {
+ 	info := dns01.GetChallengeInfo(domain, keyAuth)
+ 
+-	authZone, err := dns01.FindZoneByFqdn(info.EffectiveFQDN)
++	_, err := dns01.FindZoneByFqdn(info.EffectiveFQDN)
+ 	if err != nil {
+ 		return fmt.Errorf("timewebcloud: could not find zone for domain %q: %w", domain, err)
+ 	}
+@@ -145,9 +144,9 @@ func (d *DNSProvider) CleanUp(domain, token, keyAuth string) error {
+ 		return fmt.Errorf("timewebcloud: unknown record ID for '%s'", info.EffectiveFQDN)
+ 	}
+ 
+-	err = d.client.DeleteRecord(context.Background(), authZone, recordID)
++	err = d.client.DeleteRecord(context.Background(), info.EffectiveFQDN, recordID)
+ 	if err != nil {
+-		return fmt.Errorf("timewebcloud: %w", err)
++		return fmt.Errorf("timewebcloud: delete record: %w", err)
+ 	}
+ 
+ 	d.recordIDsMu.Lock()
