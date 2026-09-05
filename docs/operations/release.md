@@ -18,7 +18,6 @@ Only a passing, reviewed candidate can be published to `clanwright/network` with
 an exact immutable release tag. Verify the tag's source identity and run the local
 gates against that tagged source before consumer adoption. There is no hosted CI
 or automatic merge/release workflow; these are local owner-controlled gates.
-The first release is currently unfinished and has no claimed tag here.
 
 Consumer adoption is a subsequent transaction: use the exact verified Network
 tag, retain the resolved revision in the consumer lock, select the intended Clan
