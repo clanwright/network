@@ -1,28 +1,55 @@
 { settings }:
-{ lib, pkgs, ... }:
+{ lib, ... }:
 let
-  rules = import ./firewall-rules.nix {
-    inherit lib pkgs;
-    publicIPv4 =
-      if settings.bootstrapSsh.publicIPv4 == null then "" else settings.bootstrapSsh.publicIPv4;
-    bootstrapWanSshMarkerPath = settings.bootstrapSsh.markerPath;
-    bootstrapSsh = settings.bootstrapSsh.enable;
-    inherit (settings) rejectHttp;
-  };
+  bootstrap = settings.bootstrapSsh;
 in
 {
+  imports = lib.optional bootstrap.enable (import ./bootstrap-ssh.nix { inherit settings; });
+
   assertions = [
     {
-      assertion = !settings.bootstrapSsh.enable || settings.bootstrapSsh.publicIPv4 != null;
+      assertion = !bootstrap.enable || bootstrap.publicIPv4 != null;
       message = "network firewall bootstrap SSH requires publicIPv4.";
     }
   ];
+
+  networking.nftables = {
+    enable = true;
+    # The NixOS table manager emits per-table atomic replacement.  Never flush
+    # runtime tables owned by Tailscale, fail2ban, containers, or an operator.
+    flushRuleset = lib.mkForce false;
+    tables."nixos-fw".content = lib.mkIf bootstrap.enable (
+      lib.mkBefore ''
+        set bootstrap_ssh_v4 {
+          type ipv4_addr
+          flags timeout
+        }
+      ''
+    );
+    tables.network-edge-policy = lib.mkIf settings.rejectHttp {
+      family = "inet";
+      content = ''
+        chain input_guard {
+          type filter hook input priority filter - 10; policy accept;
+
+          iifname != "lo" tcp dport 80 drop comment "network: reject non-loopback HTTP"
+        }
+      '';
+    };
+  };
+
   services.openssh.openFirewall = false;
   networking.firewall = {
     enable = true;
+    backend = "nftables";
     allowPing = lib.mkForce false;
-    inherit (settings.public) allowedTCPPorts allowedUDPPorts;
+    inherit (settings.public) allowedTCPPorts;
+    inherit (settings.public) allowedUDPPorts;
     inherit (settings) interfaces;
-    inherit (rules) extraCommands extraStopCommands;
+    extraInputRules = lib.mkIf bootstrap.enable (
+      lib.mkBefore ''
+        ip daddr @bootstrap_ssh_v4 tcp dport 22 accept comment "network: active bootstrap SSH"
+      ''
+    );
   };
 }

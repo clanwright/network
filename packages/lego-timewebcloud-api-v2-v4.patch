@@ -50,3 +50,115 @@ index 8d55d67..471e688 100644
  	}
  
  	d.recordIDsMu.Lock()
+diff --git a/providers/dns/timewebcloud/timewebcloud_test.go b/providers/dns/timewebcloud/timewebcloud_test.go
+index 2bc642d..5e60ea3 100644
+--- a/providers/dns/timewebcloud/timewebcloud_test.go
++++ b/providers/dns/timewebcloud/timewebcloud_test.go
+@@ -3,0 +4,5 @@
++	"encoding/json"
++	"net"
++	"net/http"
++	"net/http/httptest"
++	"net/url"
+@@ -6,0 +12 @@
++	"github.com/go-acme/lego/v4/challenge/dns01"
+@@ -7,0 +14,2 @@
++	"github.com/miekg/dns"
++	"github.com/stretchr/testify/assert"
+@@ -94,0 +103,96 @@
++func TestNetworkTimewebV2Contract(t *testing.T) {
++	dns01.ClearFqdnCache()
++
++	dnsConn, err := net.ListenPacket("udp", "127.0.0.1:0")
++	require.NoError(t, err)
++
++	dnsServer := &dns.Server{
++		PacketConn: dnsConn,
++		Handler: dns.HandlerFunc(func(w dns.ResponseWriter, req *dns.Msg) {
++			msg := new(dns.Msg)
++			msg.SetReply(req)
++
++			for _, question := range req.Question {
++				switch {
++				case question.Qtype == dns.TypeCNAME && question.Name == "_acme-challenge.alias.example.test.":
++					msg.Answer = append(msg.Answer, &dns.CNAME{
++						Hdr: dns.RR_Header{Name: question.Name, Rrtype: dns.TypeCNAME, Class: dns.ClassINET, Ttl: 60},
++						Target: "_acme-challenge.target.example.test.",
++					})
++				case question.Qtype == dns.TypeSOA:
++					msg.Answer = append(msg.Answer, &dns.SOA{
++						Hdr:     dns.RR_Header{Name: "example.test.", Rrtype: dns.TypeSOA, Class: dns.ClassINET, Ttl: 60},
++						Ns:      "ns.example.test.",
++						Mbox:    "hostmaster.example.test.",
++						Serial:  1,
++						Refresh: 60,
++						Retry:   60,
++						Expire:  60,
++						Minttl:  60,
++					})
++				}
++			}
++
++			require.NoError(t, w.WriteMsg(msg))
++		}),
++	}
++
++	go func() { _ = dnsServer.ActivateAndServe() }()
++	t.Cleanup(func() { require.NoError(t, dnsServer.Shutdown()) })
++	require.NoError(t, dns01.AddRecursiveNameservers([]string{dnsConn.LocalAddr().String()})(nil))
++
++	const (
++		domain  = "alias.example.test"
++		token   = "challenge-token"
++		keyAuth = "fixture-key-authorization"
++	)
++
++	expectedValue := dns01.GetChallengeInfo(domain, keyAuth).Value
++	var calls []string
++	failCreate := false
++	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
++		calls = append(calls, req.Method+" "+req.URL.Path)
++		assert.Equal(t, "Bearer dummy-token", req.Header.Get("Authorization"))
++
++		switch {
++		case req.Method == http.MethodPost && req.URL.Path == "/v2/domains/_acme-challenge.target.example.test/dns-records":
++			var body map[string]string
++			require.NoError(t, json.NewDecoder(req.Body).Decode(&body))
++			assert.Equal(t, map[string]string{"type": "TXT", "value": expectedValue}, body)
++			w.Header().Set("Content-Type", "application/json")
++			if failCreate {
++				w.WriteHeader(http.StatusBadRequest)
++				_, _ = w.Write([]byte(`{"status_code":400,"error_code":"bad_request","message":"rejected","response_id":"fixture"}`))
++				return
++			}
++			w.WriteHeader(http.StatusCreated)
++			_, _ = w.Write([]byte(`{"dns_record":{"id":123,"type":"TXT","fqdn":"_acme-challenge.target.example.test","data":{"value":"fixture","sub":"_acme-challenge.target"}}}`))
++		case req.Method == http.MethodDelete && req.URL.Path == "/v2/domains/_acme-challenge.target.example.test/dns-records/123":
++			w.WriteHeader(http.StatusNoContent)
++		default:
++			http.NotFound(w, req)
++		}
++	}))
++	t.Cleanup(api.Close)
++
++	provider, err := NewDNSProviderConfig(&Config{AuthToken: "dummy-token", HTTPClient: api.Client()})
++	require.NoError(t, err)
++	provider.client.BaseURL, err = url.Parse(api.URL)
++	require.NoError(t, err)
++
++	require.NoError(t, provider.Present(domain, token, keyAuth))
++	require.NoError(t, provider.CleanUp(domain, token, keyAuth))
++
++	failCreate = true
++	err = provider.Present(domain, "failed-token", keyAuth)
++	require.EqualError(t, err, "timewebcloud: create record: 400: rejected (bad_request) [fixture]")
++	require.EqualError(t, provider.CleanUp(domain, "failed-token", keyAuth),
++		"timewebcloud: unknown record ID for '_acme-challenge.target.example.test.'")
++
++	assert.Equal(t, []string{
++		"POST /v2/domains/_acme-challenge.target.example.test/dns-records",
++		"DELETE /v2/domains/_acme-challenge.target.example.test/dns-records/123",
++		"POST /v2/domains/_acme-challenge.target.example.test/dns-records",
++	}, calls)
++}
++

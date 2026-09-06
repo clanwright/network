@@ -85,9 +85,9 @@ let
       ) collidingPairs;
       invalidOwners = lib.filter (
         entry:
-        builtins.length entry.claim.siteOwners > 1
-        || builtins.any (owner: owner == "") entry.claim.siteOwners
-        || (entry.claim.siteOwners != [ ] && !entry.claim.publicSite)
+        builtins.any (owner: owner == "") entry.claim.siteOwners
+        || (entry.claim.publicSite && builtins.length entry.claim.siteOwners != 1)
+        || (!entry.claim.publicSite && entry.claim.siteOwners != [ ])
         || duplicateValues entry.claim.capabilities != [ ]
         || (entry.claim.capabilities != [ ] && !entry.claim.publicSite)
         || (entry.claim.siteAddress != null && entry.claim.capabilities == [ ])
@@ -126,7 +126,7 @@ let
       listenAddresses = lib.mkOption {
         type = lib.types.listOf lib.types.str;
         default = [ ];
-        description = "IPv4 listeners; an empty list is a wildcard.";
+        description = "IPv4 listeners; an empty list or 0.0.0.0 is a wildcard.";
       };
       useACMEHost = lib.mkOption {
         type = lib.types.str;
@@ -159,7 +159,7 @@ let
       siteOwners = lib.mkOption {
         type = lib.types.listOf lib.types.str;
         default = [ ];
-        description = "Single consumer ownership token for a public static site.";
+        description = "Exactly one nonempty consumer ownership token when publicSite is true; otherwise empty.";
       };
       capabilities = lib.mkOption {
         type = lib.types.listOf (lib.types.enum [ "forward-proxy" ]);

@@ -14,7 +14,12 @@ let
       self.clan = consumer.config;
     };
     specialArgs.clan-core = inputs.clan-core;
-    directory = root;
+    # The fixture has no machine inventory on disk. Give Clan a materialized,
+    # isolated directory instead of re-coercing the virtual Git flake root.
+    directory = builtins.path {
+      path = root + /tests;
+      name = "network-consumer-fixtures";
+    };
     imports = [
       {
         machines.network-node = _: {

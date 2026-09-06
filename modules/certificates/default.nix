@@ -56,6 +56,18 @@ let
   package = self.packages.x86_64-linux.lego;
 in
 {
+  options.security.acme.certs = lib.mkOption {
+    # NixOS modules such as Caddy append native renewal consumers directly to
+    # security.acme.certs.<name>.reloadServices.  Deduplicate only after every
+    # module contribution has been merged.
+    apply = lib.mapAttrs (
+      _: certificate:
+      certificate
+      // {
+        reloadServices = lib.unique certificate.reloadServices;
+      }
+    );
+  };
   imports = [ ./claims.nix ];
   options.networkCore.acme.reloadServices = lib.mkOption {
     type = lib.types.attrsOf (lib.types.listOf lib.types.str);
@@ -102,7 +114,7 @@ in
     sops.secrets.${settings.secretName} = {
       owner = "acme";
       group = "acme";
-      mode = "0440";
+      mode = "0400";
     };
     security.acme = {
       acceptTerms = true;

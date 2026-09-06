@@ -48,6 +48,11 @@ _: _: {
               type = lib.types.strMatching "/[^\n]*";
               default = "/var/lib/bootstrap/allow-wan-ssh";
             };
+            durationSeconds = lib.mkOption {
+              type = lib.types.ints.between 1 3600;
+              default = 3600;
+              description = "Maximum bootstrap SSH window and explicit renewal duration.";
+            };
           };
 
         };

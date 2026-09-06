@@ -63,3 +63,33 @@ if [ "$MODE" = static ]; then
 else
   ip -4 route show default | grep -q 'via 192.0.2.1 dev wan0'
 fi
+
+printf 'carrier cycle: down\n' | tee "$out/carrier-cycle.log"
+ip link set wan0 down
+if [ "$MODE" = dhcp ]; then
+  ip -4 addr flush dev wan0
+fi
+ip link set wan0 up
+printf 'carrier cycle: up\n' | tee -a "$out/carrier-cycle.log"
+
+recovered=false
+for attempt in $(seq 1 100); do
+  if [ "$MODE" = static ]; then
+    if ip -4 addr show dev wan0 | grep -q '192.0.2.3/24' && ip -4 route show table 100 | grep -q 'default via 192.0.2.1'; then
+      recovered=true
+      break
+    fi
+  elif ip -4 addr show dev wan0 | grep -q 'inet 192.0.2.1[0-9]/24' && ip -4 route show default | grep -q 'via 192.0.2.1 dev wan0'; then
+    recovered=true
+    break
+  fi
+  kill -0 "$NETWORKD_PID" || break
+  sleep .1
+done
+ip -j addr show > "$out/addresses-after-carrier-cycle.json"
+ip -j route show table all > "$out/routes-after-carrier-cycle.json"
+if [ "$recovered" != true ]; then
+  cat "$out/networkd.log" >&2
+  exit 1
+fi
+printf 'carrier cycle: recovered\n' | tee -a "$out/carrier-cycle.log"

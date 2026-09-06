@@ -48,17 +48,6 @@ in
           protocols h1 h2
         }
       '';
-      extraConfig = ''
-        (tailnet_only) {
-          @tailnet remote_ip 100.64.0.0/10
-          handle @tailnet {
-            reverse_proxy {args[0]}
-          }
-          handle {
-            respond 403
-          }
-        }
-      '';
     };
     systemd.services.caddy = {
       requires = lib.unique (lib.concatMap (claim: claim.requiresUnits) (lib.attrValues fragments));

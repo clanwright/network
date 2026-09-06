@@ -15,6 +15,11 @@ routable state, with anyInterface disabled.
 `enableIPv6` defaults null (no global override); set false to preserve the
 original IPv4-only policy. The module explicitly selects systemd-networkd.
 Claims reject duplicate WAN interface ownership and conflicting table IDs or
-names across selected static instances. Reserved table IDs 253–255 are rejected.
+names across selected instances. A host may select at most one static WAN
+instance, while that instance may retain two IPv4 addresses on its one physical
+interface. Physical MAC ownership is case-insensitive and unique even when two
+claims use different interface names. IPv4 settings use canonical dotted-decimal
+octets and `rulePriority` is limited to the networkd unsigned 32-bit range
+excluding zero. Reserved table IDs 253–255 are rejected.
 No WAN selection leaves existing external networking untouched. Replace the old
 static module and explicitly pass the consumer's former network/table values.

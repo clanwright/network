@@ -3,7 +3,7 @@
   networkCore.wan.claims = [
     {
       owner = "static:${settings.interface}";
-      inherit (settings) interface;
+      inherit (settings) interface macAddress;
       mode = "static";
       tableId = settings.routeTableId;
       tableName = settings.routeTableName;

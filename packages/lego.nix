@@ -14,6 +14,13 @@ pkgs.lego.overrideAttrs (previous: {
     apiV2
     ./lego-timewebcloud-api-v2-v4.patch
   ];
+  doCheck = true;
+  checkPhase = ''
+    runHook preCheck
+    export GOFLAGS="''${GOFLAGS//-trimpath/}"
+    go test -v ./providers/dns/timewebcloud -run '^TestNetworkTimewebV2Contract$' -count=1
+    runHook postCheck
+  '';
   postPatch = (previous.postPatch or "") + ''
     grep -F 'JoinPath("v2", "domains"' providers/dns/timewebcloud/internal/client.go
   '';

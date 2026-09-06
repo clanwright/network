@@ -7,23 +7,28 @@ Certificates must already exist in `security.acme.certs`; consumers register
 renewal reloads with Certificates. No certificate or firewall policy is implied.
 
 Consumers declare `networkCore.caddy.fragments.<name>` with `hostName`, optional
-`serverAliases`, IPv4 `listenAddresses` (empty means wildcard), `useACMEHost`, and
-`logFile`. Caddy rejects normalized host overlaps on shared listeners. Routes
-render in order: `preRouteConfigFragments`, `extraConfig`, `extraConfigFragments`.
-Consumers own all route text, static roots, and runtime fragment generation.
+`serverAliases`, IPv4 `listenAddresses`, `useACMEHost`, and `logFile`. An empty
+list and `0.0.0.0` are wildcard listeners. Private sites must instead use
+concrete IPv4 listeners; the consumer owns its tailnet address and firewall
+enforcement; Network does not infer privacy from `publicSite = false`. Caddy
+rejects normalized host overlaps on shared listeners. Routes render in order:
+`preRouteConfigFragments`, `extraConfig`, `extraConfigFragments`. Consumers own
+all route text, static roots, and runtime fragment generation.
 
-A public site sets `publicSite = true` and one `siteOwners` token. Multiple site
-owners are rejected. A forward-proxy consumer adds `capabilities = [
+A public site sets `publicSite = true` and exactly one nonempty `siteOwners`
+token. Claims without `publicSite` cannot declare a site owner. A forward-proxy consumer adds `capabilities = [
 "forward-proxy" ]` to its selected public site and explicitly sets `siteAddress =
 ":443"`. The capability is exclusive on overlapping listeners and enables
 forward proxy ordering. Caddy does not generate CONNECT routing or authentication
 policy. Consumers supply imports and cross-site CONNECT route fragments.
 
-The base retains HTTP/1 and HTTP/2, disabled automatic HTTPS, JSON access logs,
-the `tailnet_only` snippet. Consumers declare `afterUnits`, `wantsUnits`, and `requiresUnits` on
-claims; Caddy unions these dependencies without implicitly requiring Tailscale.
-The Clan role asserts that the effective Caddy package matches its release pin. The implementation
-modules are internal; the public integration surface is the Clan role.
+The base retains HTTP/1 and HTTP/2, disabled automatic HTTPS, and JSON access
+logs. It does not provide a shared source-IP tailnet authorization policy.
+Consumers declare `afterUnits`, `wantsUnits`, and `requiresUnits` on claims;
+Caddy unions these dependencies without implicitly requiring Tailscale. The Clan
+role asserts that the effective Caddy package matches its release pin. The
+implementation modules are internal; the public integration surface is the Clan
+role.
 
 Cross-site consumers read the site-owned `fragments` and declare `contributions`
 keyed by an existing claim name. Contributions permit only

@@ -3,7 +3,7 @@
   networkCore.wan.claims = [
     {
       owner = "dhcp:${settings.interface}";
-      inherit (settings) interface;
+      inherit (settings) interface macAddress;
       mode = "dhcp";
     }
   ];

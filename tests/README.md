@@ -1,42 +1,58 @@
 # Independent package verification
 
-The checks instantiate external Clan consumers using the published raw module
-IDs. Each primary brick is selected on its own. The wildcard helper is tested
-with its required certificate service and must not select Caddy or register an
-implicit reload consumer. Consumers force all assertions, rendered systemd unit
-texts, and the NixOS top-level derivation without building or booting that host.
+Checks select raw Clan module IDs through an isolated synthetic consumer.
+They force assertions, generated systemd units and the NixOS top-level
+configuration without building or booting that host. Each primary capability
+is selectable alone; wildcard claims require Certificates without implicitly
+selecting Caddy or adding reload consumers. Combined Certificates/Caddy checks
+cover native reload registration and deduplication.
 
-Negative fixtures reject competing WAN owners, reserved routing tables, missing
-bootstrap addresses, overlapping Caddy claims (including explicit `0.0.0.0`
-listeners), undeclared renewal targets, and inconsistent explicit/inline
-certificate owners. Matching certificate owners are accepted.
+The same evaluation-only predicates are available to the native macOS
+`verify-fast` developer app through `lib.checkContracts`; Linux runtime checks
+remain mandatory for runtime/release acceptance.
 
-Runtime derivations execute on the existing x86_64-linux builder. They never boot
-a VM or contact a provider. Namespace creation failure fails the check.
+Negative fixtures reject competing WAN owners, invalid addresses, duplicate
+MACs/interfaces/tables, multiple static WAN instances, invalid bootstrap
+settings, overlapping Caddy listeners, public roots without exactly one owner,
+undeclared renewal targets and inconsistent certificate ownership.
 
-- Caddy validates the actual generated native Caddyfile with consumer site and
-  forward-proxy contributions, including native required-unit ordering. Only
-  certificate fixture paths are relocated; keys
-  are generated in the build sandbox and never copied to check outputs.
-- Firewall executes the actual evaluated start and stop rules in a private
-  network namespace. It verifies IPv4/IPv6 rule convergence, marker-controlled
-  bootstrap SSH, HTTP rejection, teardown, and preservation of unrelated rules.
-  This is rule-state verification, not an end-to-end packet reachability test.
-- WAN starts native systemd-networkd with generated native configuration in a
-  private user/network/mount namespace and fixture root. Read-only empty `/sys`
-  follows systemd's container interface, disabling the absent udev dependency.
-  DHCP obtains a real lease from namespace-local dnsmasq; static WAN verifies
-  both addresses, policy routing, and source-specific route selection. These
-  tests do not exercise physical NIC renaming, carrier loss, or host boot order.
-- ACME executes native order/renew scripts with the authoritative Lego package
-  against a local Pebble CA using actual HTTP-01 validation. It verifies changed
-  certificate serials and executes the native post-renew script, relocating only
-  its fixture directory. A recording `systemctl` stub verifies notification
-  requests and suppresses duplicates when no renewed marker exists. It does not
-  claim a running systemd consumer was restarted or that Timeweb DNS-01 was
-  exercised. Only public certificates, serials, and logs are retained.
+Runtime derivations execute on the existing x86_64-linux builder with isolated
+processes and namespaces. Namespace creation failure fails the gate. They do not
+boot VMs or contact a real DNS/ACME provider.
 
-Systemd initialization evidence is from upstream v261.2:
-`src/network/networkd-link.c` calls `udev_available()` before waiting for device
-initialization; `src/shared/udev-util.c` determines availability from whether
-`/sys` is read-only. No daemon patch or builder capability override is used.
+- Caddy checks the built plugin inventory and validates the generated Caddyfile.
+  It retains forwardproxy and ratelimit, removes layer4, and uses h1/h2.
+  Actual HTTP requests cover all three Vaultwarden authentication paths:
+  fourteen successes, then rate limiting, with an adjacent route unaffected.
+  Forwardproxy presence and composition are checked; CONNECT traffic is not.
+- Firewall loads the full evaluated native nftables tables and sends real
+  packets through isolated interfaces. It covers public/tailnet ports,
+  IPv4/IPv6 HTTP rejection, key-only bootstrap configuration, absolute-deadline
+  expiry without reload, explicit renewal, revocation, reload, unsafe markers,
+  unrelated tables and a later independent ban chain. Expiry blocks new
+  connections; existing conntrack sessions follow the native stateful policy.
+- WAN runs native systemd-networkd with generated configuration. DHCP obtains
+  a lease from local dnsmasq and reacquires it after a lease/address reset.
+  Static WAN checks both addresses, policy routing and source selection.
+  Both exercise carrier down/up. Read-only empty `/sys` uses networkd's
+  container behavior; physical NIC renaming and production boot are not tested.
+- The combined Certificates/Caddy contract evaluates provider-credential owner
+  `acme`, group `acme` and mode `0400`, certificate group `acme`, and Caddy
+  membership in that group. It does not prove SOPS delivery or actual runtime
+  access and denial on a deployed machine; those remain separate machine
+  acceptance. The synthetic distinct-UID fixture is retired by owner-approved
+  scope decision, with no replacement mandatory local gate.
+- ACME runs native issuance/renewal scripts with the authoritative Lego package
+  against local Pebble HTTP-01. It verifies changed certificate serials and
+  invokes the native postrun through a recording systemctl adapter that reloads
+  a real Caddy process. TLS then serves the renewed certificate; absent renewal
+  markers do not trigger duplicate notifications. This is not a booted systemd
+  lifecycle or production Timeweb DNS-01 acceptance.
+- The Lego package runs an offline Timeweb provider contract against local DNS
+  and a mock HTTP API: v2 record creation, effective CNAME target, request body,
+  authentication header, cleanup ID/path and failed-creation handling.
+
+Only public certificates, serials, configuration and readable logs are retained
+in check outputs. Generated private keys stay in the ephemeral build sandbox.
+See [verification](../docs/operations/verify.md) for commands, artifacts and
+remaining live acceptance boundaries.

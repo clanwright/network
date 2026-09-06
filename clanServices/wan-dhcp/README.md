@@ -10,5 +10,8 @@ unchanged; consumers preserving an IPv4-only host must explicitly set false.
 
 Each selected service contributes a typed internal `networkCore.wan.claims`
 entry. One owner per interface is required, including across DHCP/static roles.
+Physical MAC ownership is also unique after case normalization, so aliases cannot
+claim the same NIC under different interface names. Multiple DHCP instances are
+supported when their interfaces and MAC addresses are distinct.
 Without a selected WAN service the package does not modify external networking.
 Remove the old interface/network module when selecting this replacement.
