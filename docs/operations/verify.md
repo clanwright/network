@@ -1,9 +1,11 @@
 # Local verification
 
 Run from the Network repository on the configured development host. Runtime
-checks use the existing x86_64-linux builder. Do not change builders or add QEMU
-VM configuration to make a gate pass. Namespace availability is a prerequisite;
-its absence fails the runtime gate.
+checks use the existing x86_64-linux builder. Do not create or use virtual
+machines for development or verification, including NixOS VM tests and QEMU/KVM.
+Use process/namespace checks, do not change builders to make a gate pass, and
+treat namespace availability as a prerequisite whose absence fails the runtime
+gate.
 
 ## Fast development gate on Apple Silicon macOS
 

@@ -13,10 +13,13 @@ independent findings-first review and resolution of material findings, followed
 by the relevant existing checks in docs/operations/verify.md.
 
 Runtime support is x86_64-linux only. Darwin formatter availability is a developer
-tool, not runtime support. Do not add architectures, a generic provider/plugin
-framework, consumer package overrides, hosted CI, or automatic merging. New
-public settings need a concrete consumer need and a Network release. Dependency
-versions and package construction have one authority in this repository.
+tool, not runtime support. Network development and verification must not create
+or use virtual machines, including NixOS VM tests and QEMU/KVM; use the existing
+x86_64-linux builder and process/namespace checks. Do not add architectures, a
+generic provider/plugin framework, consumer package overrides, hosted CI, or
+automatic merging. New public settings need a concrete consumer need and a
+Network release. Dependency versions and package construction have one authority
+in this repository.
 
 Never print or persist credentials, decrypted secrets, private keys, passwords,
 or live client profile URLs. Inspect secret names and runtime paths only.
