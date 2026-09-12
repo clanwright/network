@@ -70,6 +70,52 @@ let
   };
   conflictingSource = ownerFixture { explicitSource = "B"; };
   missingOwnedCertificate = ownerFixture { explicitName = "absent"; };
+  missingClaimSource = consume {
+    inherit instances;
+    extraModule.networkCore.acme.certificateClaims.fixture = {
+      domain = "fixture.invalid";
+      ownerToken = "service:missing-source";
+    };
+  };
+  duplicateWrapperOwner = consume {
+    inherit instances;
+    extraModule.imports =
+      map
+        (_: {
+          networkCore.acme = {
+            certificateClaims.fixture = {
+              domain = "fixture.invalid";
+              ownerToken = "composition:duplicate";
+              sourceMarker = "composition:duplicate";
+            };
+            claimOwners = [
+              {
+                certName = "fixture";
+                ownerToken = "composition:duplicate";
+                sourceMarker = "composition:duplicate";
+              }
+            ];
+          };
+        })
+        [
+          "wrapper-a"
+          "wrapper-b"
+        ];
+  };
+  readOnlyOwnerOverride = builtins.tryEval (
+    builtins.deepSeq
+      (consume {
+        inherit instances;
+        extraModule.networkCore.acme.evaluatedOwners = [
+          {
+            certName = "fixture";
+            ownerToken = "external:override";
+            sourceMarker = "external:override";
+          }
+        ];
+      }).machine.networkCore.acme.evaluatedOwners
+      true
+  );
   production = consume {
     inherit instances;
     extraModule = base;
@@ -90,6 +136,13 @@ let
       # Deliberately duplicate the native Caddy registration to prove the
       # effective NixOS ACME option is deduplicated after module merging.
       networkCore.acme.reloadServices.fixture = [ "caddy.service" ];
+      security.acme.certs.external = {
+        webroot = "/var/lib/acme-challenges";
+        reloadServices = [
+          "external.service"
+          "external.service"
+        ];
+      };
       networkCore.caddy.fragments.fixture = {
         hostName = "fixture.invalid";
         useACMEHost = "fixture";
@@ -150,7 +203,12 @@ let
     && builtins.elem "acme" combined.machine.users.users.caddy.extraGroups
     && builtins.length combined.machine.security.acme.certs.fixture.reloadServices == 2
     && builtins.elem "fixture-consumer.service" combined.machine.security.acme.certs.fixture.reloadServices
-    && builtins.elem "caddy.service" combined.machine.security.acme.certs.fixture.reloadServices;
+    && builtins.elem "caddy.service" combined.machine.security.acme.certs.fixture.reloadServices
+    &&
+      combined.machine.security.acme.certs.external.reloadServices == [
+        "external.service"
+        "external.service"
+      ];
 in
 {
   consumer-wildcard = gate "network-consumer-wildcard" (
@@ -164,9 +222,20 @@ in
   certificate-owner-consistency = gate "network-certificate-owner-consistency" (
     matchingOwner.valid
     && matchingOwner.evaluated
+    &&
+      matchingOwner.machine.networkCore.acme.evaluatedOwners == [
+        {
+          certName = "fixture";
+          ownerToken = "service:A";
+          sourceMarker = "A";
+        }
+      ]
     && !conflictingOwner.valid
     && !conflictingSource.valid
     && !missingOwnedCertificate.valid
+    && !missingClaimSource.valid
+    && !duplicateWrapperOwner.valid
+    && !readOnlyOwnerOverride.success
   );
   consumer-certificates = gate "network-consumer-certificates" contract;
   certificates-caddy-integration = gate "network-certificates-caddy-integration" combinedContract;

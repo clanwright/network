@@ -17,6 +17,7 @@ let
     publicSite = true;
     siteOwners = [ "vaultwarden" ];
     capabilities = [ "forward-proxy" ];
+    siteAddress = ":443";
     extraConfig = ''
       @vaultwardenAuth path /identity/connect/token /identity/accounts/prelogin /identity/accounts/register
       route @vaultwardenAuth {
@@ -57,7 +58,7 @@ let
           preRouteConfigFragments = [ ];
         };
         contributions.vaultwarden = {
-          inherit (claim) capabilities preRouteConfigFragments;
+          inherit (claim) capabilities siteAddress preRouteConfigFragments;
           requiresUnits = [ "fixture-auth.service" ];
           afterUnits = [ "fixture-auth.service" ];
         };
@@ -65,6 +66,16 @@ let
       systemd.services.fixture-auth = {
         serviceConfig.Type = "oneshot";
         script = "true";
+      };
+      services.caddy = {
+        globalConfig = lib.mkAfter "admin off";
+        virtualHosts.vaultwarden = {
+          hostName = lib.mkForce "https://vaultwarden.fixture.invalid:18080";
+          useACMEHost = lib.mkForce null;
+          extraConfig = lib.mkAfter ''
+            tls /tmp/network-caddy-runtime-cert.pem /tmp/network-caddy-runtime-key.pem
+          '';
+        };
       };
     };
   };
@@ -102,6 +113,50 @@ let
       };
     };
   };
+  incompleteForwardProxy =
+    fragment: contribution:
+    consume {
+      instances.caddy = caddyInstance;
+      extraModule = {
+        security.acme = {
+          acceptTerms = true;
+          defaults.email = "fixture@example.invalid";
+          certs.fixture = {
+            domain = "vaultwarden.fixture.invalid";
+            webroot = "/tmp/acme-fixture";
+          };
+        };
+        networkCore.caddy = {
+          fragments.vaultwarden =
+            claim
+            // {
+              capabilities = [ ];
+              siteAddress = null;
+            }
+            // fragment;
+          contributions.vaultwarden = contribution;
+        };
+      };
+    };
+  completedForwardProxy = incompleteForwardProxy { capabilities = [ "forward-proxy" ]; } {
+    siteAddress = ":443";
+  };
+  malformedLog =
+    logFile:
+    consume {
+      instances.caddy = caddyInstance;
+      extraModule = {
+        security.acme.certs.fixture = {
+          domain = "vaultwarden.fixture.invalid";
+          webroot = "/tmp/acme-fixture";
+        };
+        networkCore.caddy.fragments.vaultwarden = claim // {
+          inherit logFile;
+          capabilities = [ ];
+          siteAddress = null;
+        };
+      };
+    };
 in
 {
   caddy-contribution-dependencies = gate "network-caddy-contribution-dependencies" (
@@ -110,6 +165,28 @@ in
     && builtins.elem "fixture-auth.service" site.machine.systemd.services.caddy.requires
     && builtins.elem "fixture-auth.service" site.machine.systemd.services.caddy.after
     && site.machine.networkCore.caddy.effectiveFragments.vaultwarden.capabilities == [ "forward-proxy" ]
+    && site.machine.networkCore.caddy.effectiveFragments.vaultwarden.siteAddress == ":443"
+    && completedForwardProxy.valid
+    && completedForwardProxy.evaluated
+    && completedForwardProxy.machine.services.caddy.virtualHosts.vaultwarden.hostName == ":443"
+    && rejected (incompleteForwardProxy { capabilities = [ "forward-proxy" ]; } { })
+    && rejected (incompleteForwardProxy { siteAddress = ":443"; } { })
+    && rejected (incompleteForwardProxy { } { capabilities = [ "forward-proxy" ]; })
+    && rejected (incompleteForwardProxy { } { siteAddress = ":443"; })
+    && builtins.all (value: rejected (malformedLog value)) [
+      "relative.log"
+      "/tmp/with space.log"
+      "/tmp/with\nnewline.log"
+      "/tmp/%n.log"
+      "/tmp/{env}.log"
+      "/tmp/../escaped.log"
+      "/tmp/./dot.log"
+      "/tmp//empty.log"
+      "/tmp/trailing/"
+      "/tmp/quote\".log"
+      "/tmp/backslash\\.log"
+      "/tmp/semi;colon.log"
+    ]
   );
 
   caddy-wildcard-listener-collisions = gate "network-caddy-wildcard-listener-collisions" (
@@ -145,14 +222,16 @@ in
       }
       ''
         mkdir -p "$out"
-        openssl req -x509 -newkey rsa:2048 -nodes -keyout key.pem -out fullchain.pem -days 1 -subj /CN=vaultwarden.fixture.invalid 2> >(tee "$out/certificate-generation.log" >&2)
-        cp fullchain.pem cert.pem
+        openssl req -x509 -newkey rsa:2048 -nodes -keyout /tmp/network-caddy-runtime-key.pem -out /tmp/network-caddy-runtime-cert.pem -days 1 -subj /CN=vaultwarden.fixture.invalid 2> >(tee "$out/certificate-generation.log" >&2)
         cp ${site.machine.services.caddy.configFile} "$out/Caddyfile.original"
-        sed "s|/var/lib/acme/fixture|$PWD|g" "$out/Caddyfile.original" > "$out/Caddyfile"
-        caddy adapt --config "$out/Caddyfile" --adapter caddyfile > "$out/config.json" 2> >(tee "$out/adapt.log" >&2)
+        caddy adapt --config "$out/Caddyfile.original" --adapter caddyfile > "$out/config.json" 2> >(tee "$out/adapt.log" >&2)
+        grep -F 'https://vaultwarden.fixture.invalid:18080' "$out/Caddyfile.original"
+        grep -F 'forward_proxy' "$out/Caddyfile.original"
         grep -F '"handler":"rate_limit"' "$out/config.json"
+        grep -F '"handler":"forward_proxy"' "$out/config.json"
         grep -F '"protocols":["h1","h2"]' "$out/config.json"
         caddy validate --config "$out/config.json" 2>&1 | tee "$out/validate.log"
+        rm -f /tmp/network-caddy-runtime-key.pem /tmp/network-caddy-runtime-cert.pem
       '';
 
   caddy-ratelimit-runtime =
@@ -162,11 +241,15 @@ in
           self.packages.x86_64-linux.caddy-custom
           pkgs.curl
           pkgs.gnugrep
+          pkgs.iproute2
+          pkgs.openssl
+          pkgs.util-linux
         ];
       }
       ''
         mkdir -p "$out"
         export out
+        export CADDY_CONFIG=${site.machine.services.caddy.configFile}
         bash ${../tests/caddy-runtime.sh} 2>&1 | tee "$out/runtime.log"
       '';
 }

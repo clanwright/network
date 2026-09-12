@@ -16,12 +16,34 @@ There is no hosted CI, automatic merge or automatic release.
 5. Prepare release notes describing behavior, breaking surfaces, validation and
    required consumer changes. Keep draft notes in the ignored `.work/release/`.
 
-The current breaking candidate removes Network TCP tuning and `tailnet_only`,
-requires nftables, requires a single owner for public Caddy roots, narrows WAN
-validation and replaces the empty bootstrap marker with an expiring deadline.
-Consumers move tuning to their VPN domain, bind private admin sites to their
-Tailscale address with interface enforcement, and update bootstrap/handoff
-scripts. Existing IPv4-only and HTTP/1.1+HTTP/2 behavior is retained.
+## Version 2 migration
+
+Before adopting version 2, update consumers as follows:
+
+- Assemble `capabilities = [ "forward-proxy" ]` and `siteAddress = ":443"`
+  together. A base Caddy fragment and its contributions may supply the pair
+  separately; the final declaration must be complete.
+- Use canonical absolute Caddy log paths with nonempty path segments containing
+  only letters, digits, `.`, `_`, `+` and `-`; `.` and `..` segments are invalid.
+  Keep certificate ownership in `certificateClaims` and `claimOwners`, and remove
+  any writes to the internal read-only `evaluatedOwners` result.
+- Supply canonical IPv4 addresses for bootstrap SSH, as for WAN and Caddy.
+  Rejected markers now converge closed with a diagnostic and successful refresh;
+  scripts must not use refresh failure as a test for an invalid marker. Genuine
+  nftables errors still fail. Explicit stricter SSH authentication methods are
+  preserved while password and keyboard-interactive authentication remain off.
+- Treat static WAN `waitOnline` settings as interface-specific readiness.
+  Consumers that used them to control host-wide waiting must configure their
+  global `systemd.network.wait-online` policy explicitly.
+- Network deduplicates final renewal notifications only for its own certificate
+  claims. Other native ACME certificates retain their notification lists.
+
+Version 1 already removed Network TCP tuning and `tailnet_only`, required
+nftables and a single owner for public Caddy roots, narrowed WAN validation and
+replaced the empty bootstrap marker with an expiring deadline. Consumers moving
+from version 0 must also move tuning to their VPN domain, bind private admin
+sites to their Tailscale address with interface enforcement, and update
+bootstrap/handoff scripts. IPv4-only and HTTP/1.1+HTTP/2 behavior is retained.
 
 ## Publish an approved candidate
 

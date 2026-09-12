@@ -13,8 +13,9 @@ gate.
 nix run --no-write-lock-file --option builders "" .#verify-fast
 ```
 
-This developer app runs pinned nixfmt, Statix, Deadnix, whitespace checks and
+This developer app runs pinned nixfmt, Statix, Deadnix, shell syntax, whitespace checks and
 all evaluation-only contracts against the unchanged x86_64-linux target. It
+includes nonignored untracked files in whitespace and shell syntax checks. It
 exports no Darwin runtime packages or NixOS support. The contract predicates
 are shared with the existing Linux flake checks through `lib.checkContracts`.
 
@@ -62,7 +63,7 @@ check_name=certificates-caddy-integration
 | `caddy-contribution-dependencies`, `caddy-wildcard-listener-collisions`, `caddy-public-site-owner` | Fragment composition, listener collision and public-root ownership |
 | `caddy-module-inventory`, `caddy-config`, `caddy-ratelimit-runtime` | Exact plugin inventory, rendered config validation and rate-limited HTTP requests |
 | `firewall-invalid-bootstrap`, `firewall-runtime` | Bootstrap settings and native nftables packet/lifecycle checks |
-| `wan-selection-contracts`, `wan-dhcp-runtime`, `wan-static-runtime` | Interface/MAC/table ownership, one static WAN, actual networkd addressing and carrier recovery |
+| `wan-selection-contracts`, `wan-dhcp-runtime`, `wan-static-runtime` | Interface/MAC ownership, one static WAN, readiness policy composition, actual networkd addressing and carrier recovery |
 
 Build every Linux check explicitly for release acceptance:
 
@@ -97,7 +98,8 @@ or the configured development environment. No runtime architecture is added by
 the optional Darwin formatter. Release acceptance also requires independent
 review and the exact-source checks above.
 
-Caddy checks retain public config, adaptation/validation logs and runtime logs.
+Caddy runtime checks execute the generated consumer configuration and retain
+public config, adaptation/validation logs and runtime logs.
 ACME outputs retain public certificates, serial evidence and logs, never generated
 private keys. The postrun fixture invokes a recording systemctl adapter that
 reloads a real Caddy process; this proves the new certificate is served but does

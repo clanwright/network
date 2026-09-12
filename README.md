@@ -31,6 +31,6 @@ Documentation index:
 - [Agent triage labels](docs/agents/triage-labels.md)
 - [Agent domain documentation rules](docs/agents/domain.md)
 
-TCP performance policy is owned by the consumer VPN domain. The breaking
-Network candidate removes the former TCP-tuning role; coordinate its migration
-with consumers before adopting a new release.
+TCP performance policy is owned by the consumer VPN domain. Network does not
+provide the former TCP-tuning role. See the
+[release and adoption guide](docs/operations/release.md) for migration requirements.

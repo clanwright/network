@@ -42,17 +42,6 @@ let
     };
   };
   claims = config.networkCore.acme.certificateClaims;
-  explicitOwners = config.networkCore.acme.claimOwners;
-  ownedNames = map (x: x.certName) explicitOwners;
-  owners =
-    explicitOwners
-    ++ lib.filter (x: x.ownerToken != null && !(builtins.elem x.certName ownedNames)) (
-      lib.mapAttrsToList (certName: claim: {
-        inherit certName;
-        inherit (claim) ownerToken sourceMarker;
-      }) claims
-    );
-  duplicate = xs: builtins.length xs != builtins.length (lib.unique xs);
   package = self.packages.x86_64-linux.lego;
 in
 {
@@ -61,11 +50,14 @@ in
     # security.acme.certs.<name>.reloadServices.  Deduplicate only after every
     # module contribution has been merged.
     apply = lib.mapAttrs (
-      _: certificate:
-      certificate
-      // {
-        reloadServices = lib.unique certificate.reloadServices;
-      }
+      name: certificate:
+      if builtins.hasAttr name claims then
+        certificate
+        // {
+          reloadServices = lib.unique certificate.reloadServices;
+        }
+      else
+        certificate
     );
   };
   imports = [ ./claims.nix ];
@@ -77,26 +69,8 @@ in
   config = {
     assertions = [
       {
-        assertion = builtins.all (
-          owner:
-          builtins.hasAttr owner.certName claims
-          && (
-            claims.${owner.certName}.ownerToken == null
-            || (
-              claims.${owner.certName}.ownerToken == owner.ownerToken
-              && claims.${owner.certName}.sourceMarker == owner.sourceMarker
-            )
-          )
-        ) explicitOwners;
-        message = "Explicit certificate ownership must match its declared certificate owner.";
-      }
-      {
         assertion = pkgs.stdenv.hostPlatform.system == "x86_64-linux";
         message = "network-certificates supports x86_64-linux only.";
-      }
-      {
-        assertion = !duplicate (map (x: x.certName) owners) && !duplicate (map (x: x.ownerToken) owners);
-        message = "Certificate ownership must be unique.";
       }
       {
         assertion = builtins.all (name: builtins.hasAttr name claims) (
@@ -109,7 +83,6 @@ in
         message = "Network owns the exact Lego package; consumer overrides are unsupported.";
       }
     ];
-    networkCore.acme.evaluatedOwners = owners;
     nixpkgs.overlays = [ (_final: _previous: { lego = package; }) ];
     sops.secrets.${settings.secretName} = {
       owner = "acme";

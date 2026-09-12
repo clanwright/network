@@ -2,6 +2,7 @@
 pkgs.writeShellApplication {
   name = "verify-fast";
   runtimeInputs = with pkgs; [
+    bash
     coreutils
     gitMinimal
     nix
@@ -48,7 +49,25 @@ pkgs.writeShellApplication {
     while IFS= read -r -d "" file; do
       if [ -f "$file" ]; then nix_files+=("$file"); fi
     done < <(git ls-files -z --cached --others --exclude-standard -- '*.nix')
-    run diff git diff --check HEAD
+    check_whitespace() {
+      git diff --check HEAD || return "$?"
+      local file status
+      while IFS= read -r -d "" file; do
+        if [ -f "$file" ]; then
+          # --no-index sets bit 0 for a new file even when --check is clean.
+          if git diff --no-index --check -- /dev/null "$file"; then status=0; else status="$?"; fi
+          if [ "$status" -gt 1 ]; then return "$status"; fi
+        fi
+      done < <(git ls-files -z --others --exclude-standard)
+    }
+    check_shell_syntax() {
+      local file
+      while IFS= read -r -d "" file; do
+        if [ -f "$file" ]; then bash -n "$file" || return "$?"; fi
+      done < <(git ls-files -z --cached --others --exclude-standard -- '*.sh')
+    }
+    run diff check_whitespace
+    run shell-syntax check_shell_syntax
     run format nixfmt --check "''${nix_files[@]}"
     run statix statix check . --ignore .work
     run deadnix deadnix --fail "''${nix_files[@]}"

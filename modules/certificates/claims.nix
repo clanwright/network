@@ -1,4 +1,4 @@
-{ lib, ... }:
+{ config, lib, ... }:
 let
   ownerRecord = _: {
     options = {
@@ -23,35 +23,44 @@ let
       lib.filter (value: builtins.length (lib.filter (candidate: candidate == value) values) > 1) values
     );
 
-  validateOwnerRecords =
-    owners:
+  collectOwnership =
+    claims: claimOwners:
     let
-      duplicateCertNames = duplicateValues (map (owner: owner.certName) owners);
-      duplicateOwnerTokens = duplicateValues (map (owner: owner.ownerToken) owners);
-    in
-    if duplicateCertNames != [ ] then
-      throw "edge ACME certificate claim collides: duplicate certName ${lib.concatStringsSep ", " duplicateCertNames}"
-    else if duplicateOwnerTokens != [ ] then
-      throw "edge ACME certificate claim collides: duplicate owner token ${lib.concatStringsSep ", " duplicateOwnerTokens}"
-    else
-      owners;
-
-  validateCertificateClaims =
-    claims:
-    let
-      records = lib.filter (claim: claim.ownerToken != null) (
+      explicitNames = map (owner: owner.certName) claimOwners;
+      claimRecords = lib.filter (owner: owner.ownerToken != null) (
         lib.mapAttrsToList (certName: claim: {
           inherit certName;
-          inherit (claim) ownerToken;
-          inherit (claim) sourceMarker;
+          inherit (claim) ownerToken sourceMarker;
         }) claims
       );
-      missingSourceMarkers = lib.filter (record: record.sourceMarker == null) records;
+      owners =
+        claimOwners ++ lib.filter (owner: !(builtins.elem owner.certName explicitNames)) claimRecords;
+      duplicateCertNames = duplicateValues (map (owner: owner.certName) owners);
+      duplicateOwnerTokens = duplicateValues (map (owner: owner.ownerToken) owners);
+      missingSourceMarkers = lib.filter (owner: owner.sourceMarker == null) claimRecords;
+      mismatchedOwners = lib.filter (
+        owner:
+        !(builtins.hasAttr owner.certName claims)
+        || (
+          claims.${owner.certName}.ownerToken != null
+          && (
+            claims.${owner.certName}.ownerToken != owner.ownerToken
+            || claims.${owner.certName}.sourceMarker != owner.sourceMarker
+          )
+        )
+      ) claimOwners;
     in
-    if missingSourceMarkers != [ ] then
-      throw "edge ACME certificate claim collides: owner token requires sourceMarker"
-    else
-      builtins.seq (validateOwnerRecords records) claims;
+    {
+      inherit
+        duplicateCertNames
+        duplicateOwnerTokens
+        mismatchedOwners
+        missingSourceMarkers
+        owners
+        ;
+    };
+
+  ownership = collectOwnership config.networkCore.acme.certificateClaims config.networkCore.acme.claimOwners;
 in
 {
   options.networkCore.acme = {
@@ -81,22 +90,44 @@ in
           };
         })
       );
-      apply = validateCertificateClaims;
       default = { };
       description = "Narrow per-application ACME certificate claims.";
     };
 
     claimOwners = lib.mkOption {
       type = lib.types.listOf (lib.types.submodule ownerRecord);
-      apply = validateOwnerRecords;
       default = [ ];
       description = "Named certificate owner records contributed by composition wrappers.";
     };
 
     evaluatedOwners = lib.mkOption {
       type = lib.types.listOf (lib.types.submodule ownerRecord);
-      default = [ ];
+      internal = true;
+      readOnly = true;
       description = "Final certificate owner records emitted by the machine ACME adapter.";
     };
+  };
+
+  config = {
+    assertions = [
+      {
+        assertion = ownership.missingSourceMarkers == [ ];
+        message = "A certificate claim owner token requires a source marker.";
+      }
+      {
+        assertion = ownership.mismatchedOwners == [ ];
+        message = "Explicit certificate ownership must match its declared certificate owner.";
+      }
+      {
+        assertion = ownership.duplicateCertNames == [ ];
+        message = "Certificate ownership must have unique certificate names.";
+      }
+      {
+        assertion = ownership.duplicateOwnerTokens == [ ];
+        message = "Certificate ownership must have unique owner tokens.";
+      }
+    ];
+
+    networkCore.acme.evaluatedOwners = ownership.owners;
   };
 }

@@ -56,6 +56,8 @@ ip -j route show table all > "$out/routes.json"
 ip -j rule show > "$out/rules.json"
 if [ "$ready" != true ]; then cat "$out/networkd.log" >&2; exit 1; fi
 if [ "$MODE" = static ]; then
+  "$WAIT_ONLINE" --interface="$WAIT_INTERFACE" --timeout="$WAIT_TIMEOUT" \
+    > "$out/wait-online.log" 2>&1
   ip -4 addr show dev wan0 | grep -q '192.0.2.2/24'
   ip -4 addr show dev wan0 | grep -q '192.0.2.3/24'
   ip rule show | grep '10010:' | grep -q 'from 192.0.2.3 lookup 100'

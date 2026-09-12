@@ -15,7 +15,10 @@ let
   refresh = pkgs.writeShellApplication {
     name = "network-bootstrap-ssh-refresh";
     runtimeInputs = [ pkgs.coreutils ];
-    text = commonEnvironment + builtins.readFile ./bootstrap-ssh-refresh.sh;
+    text =
+      commonEnvironment
+      + builtins.readFile ./bootstrap-ssh-marker.sh
+      + builtins.readFile ./bootstrap-ssh-refresh.sh;
   };
   renew = pkgs.writeShellApplication {
     name = "network-bootstrap-ssh-renew";
@@ -25,6 +28,7 @@ let
       + ''
         export REFRESH=${lib.escapeShellArg (lib.getExe refresh)}
       ''
+      + builtins.readFile ./bootstrap-ssh-marker.sh
       + builtins.readFile ./bootstrap-ssh-renew.sh;
   };
 in
@@ -52,7 +56,7 @@ in
   services.openssh.settings = {
     PasswordAuthentication = lib.mkForce false;
     KbdInteractiveAuthentication = lib.mkForce false;
-    AuthenticationMethods = lib.mkForce "publickey";
+    AuthenticationMethods = lib.mkDefault "publickey";
   };
 
   assertions = [

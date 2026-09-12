@@ -10,14 +10,7 @@ _: _: {
     interface =
       { lib, ... }:
       let
-        ipv4 = lib.types.addCheck lib.types.str (
-          value:
-          let
-            octets = lib.splitString "." value;
-            validOctet = octet: builtins.match "(0|[1-9][0-9]{0,2})" octet != null && lib.toInt octet <= 255;
-          in
-          builtins.length octets == 4 && lib.all validOctet octets
-        );
+        inherit (import ../../lib/types.nix { inherit lib; }) ipv4;
       in
       {
         options = {

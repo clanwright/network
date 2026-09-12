@@ -6,6 +6,7 @@
   gate,
 }:
 let
+  inherit (pkgs) lib;
   consume = import ./consumer.nix { inherit self inputs root; };
   instance = name: settings: {
     module = {
@@ -31,6 +32,14 @@ let
     wan-static = instance "network-wan-static" staticSettings;
   };
   consumers = builtins.mapAttrs (_: value: consume { instances.fixture = value; }) fixtures;
+  waitPolicyConsumer = consume {
+    instances.fixture = fixtures.wan-static;
+    extraModule.systemd.network.wait-online = {
+      enable = false;
+      anyInterface = true;
+      timeout = 17;
+    };
+  };
   valid = consumer: consumer.valid && consumer.evaluated;
   rejected =
     consumer:
@@ -134,6 +143,9 @@ let
         NETWORK_FILE = c.environment.etc."systemd/network/40-wan0.network".source;
         NETWORKD_CONF = c.environment.etc."systemd/networkd.conf".source;
         NETWORKD = "${c.systemd.package}/lib/systemd/systemd-networkd";
+        WAIT_ONLINE = "${c.systemd.package}/lib/systemd/systemd-networkd-wait-online";
+        WAIT_INTERFACE = if mode == "static" then "wan0:routable" else "";
+        WAIT_TIMEOUT = if mode == "static" then "60" else "";
         MODE = mode;
       }
       ''
@@ -158,6 +170,16 @@ in
         "192.0.2.2"
         "192.0.2.3"
       ]
+    && !waitPolicyConsumer.machine.systemd.network.wait-online.enable
+    && waitPolicyConsumer.machine.systemd.network.wait-online.anyInterface
+    && waitPolicyConsumer.machine.systemd.network.wait-online.timeout == 17
+    && waitPolicyConsumer.machine.systemd.services.network-wan-static-wait-online.enable
+    && builtins.elem "network-online.target" waitPolicyConsumer.machine.systemd.services.network-wan-static-wait-online.before
+    && builtins.elem "shutdown.target" waitPolicyConsumer.machine.systemd.services.network-wan-static-wait-online.before
+    &&
+      waitPolicyConsumer.machine.systemd.services.network-wan-static-wait-online.serviceConfig.TimeoutStartSec
+      == 65
+    && lib.hasSuffix "systemd-networkd-wait-online --interface=wan0:routable --timeout=60" waitPolicyConsumer.machine.systemd.services.network-wan-static-wait-online.serviceConfig.ExecStart
   );
   wan-selection-contracts = gate "network-wan-selection-contracts" (
     builtins.all rejected (builtins.attrValues conflicts)

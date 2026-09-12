@@ -1,22 +1,23 @@
 { config, lib, ... }:
 let
+  networkTypes = import ../../lib/types.nix { inherit lib; };
+
   normalizeHost = hostName: lib.toLower (lib.removeSuffix "." hostName);
 
   claimHosts = claim: map normalizeHost ([ claim.hostName ] ++ claim.serverAliases);
 
-  isCanonicalIPv4 =
-    address:
+  isSafeLogPath =
+    path:
     let
-      octets = lib.splitString "." address;
+      segments = lib.drop 1 (lib.splitString "/" path);
     in
-    builtins.length octets == 4
+    lib.hasPrefix "/" path
+    && segments != [ ]
     && builtins.all (
-      octet:
-      octet != ""
-      && (builtins.match "0|[1-9][0-9]*" octet) != null
-      && lib.toInt octet >= 0
-      && lib.toInt octet <= 255
-    ) octets;
+      segment: segment != "." && segment != ".." && builtins.match "[A-Za-z0-9._+-]+" segment != null
+    ) segments;
+
+  safeLogPath = lib.types.addCheck lib.types.str isSafeLogPath;
 
   addressesOverlap =
     left: right:
@@ -33,21 +34,13 @@ let
     );
 
   validateClaims =
-    fragments:
+    requireCompleteCapabilities: fragments:
     let
       claimEntries = lib.mapAttrsToList (key: claim: {
         inherit key claim;
         hosts = claimHosts claim;
         listenAddresses = lib.unique claim.listenAddresses;
       }) fragments;
-      invalidAddresses = lib.concatLists (
-        map (
-          entry:
-          map (address: "${entry.key}:${address}") (
-            lib.filter (address: !isCanonicalIPv4 address) entry.listenAddresses
-          )
-        ) claimEntries
-      );
       invalidAliases = lib.concatLists (
         map (
           entry:
@@ -90,7 +83,9 @@ let
         || (!entry.claim.publicSite && entry.claim.siteOwners != [ ])
         || duplicateValues entry.claim.capabilities != [ ]
         || (entry.claim.capabilities != [ ] && !entry.claim.publicSite)
-        || (entry.claim.siteAddress != null && entry.claim.capabilities == [ ])
+      ) claimEntries;
+      incompleteCapabilities = lib.filter (
+        entry: builtins.elem "forward-proxy" entry.claim.capabilities != (entry.claim.siteAddress == ":443")
       ) claimEntries;
       collisionMessage = lib.concatStringsSep "; " (
         map (
@@ -99,9 +94,7 @@ let
         ) collisions
       );
     in
-    if invalidAddresses != [ ] then
-      throw "edge Caddy claims require canonical IPv4 listen addresses: ${lib.concatStringsSep ", " invalidAddresses}"
-    else if invalidAliases != [ ] then
+    if invalidAliases != [ ] then
       throw "edge Caddy claim aliases collide with their host: ${lib.concatStringsSep ", " invalidAliases}"
     else if collisions != [ ] then
       throw "edge Caddy claims overlap: ${collisionMessage}"
@@ -109,6 +102,8 @@ let
       throw "Caddy capability claims share a listener"
     else if invalidOwners != [ ] then
       throw "Caddy site ownership or capability declaration is invalid"
+    else if requireCompleteCapabilities && incompleteCapabilities != [ ] then
+      throw "Caddy forward-proxy capability requires siteAddress :443 in the assembled effective fragment"
     else
       fragments;
 
@@ -124,7 +119,7 @@ let
         description = "Additional normalized host names served by this claim.";
       };
       listenAddresses = lib.mkOption {
-        type = lib.types.listOf lib.types.str;
+        type = lib.types.listOf networkTypes.ipv4;
         default = [ ];
         description = "IPv4 listeners; an empty list or 0.0.0.0 is a wildcard.";
       };
@@ -133,8 +128,8 @@ let
         description = "Existing DNS-01 ACME certificate name.";
       };
       logFile = lib.mkOption {
-        type = lib.types.str;
-        description = "Caddy JSON access-log path.";
+        type = safeLogPath;
+        description = "Absolute Caddy JSON access-log path using only alphanumerics, slash, dot, underscore, plus, and hyphen; dot segments are rejected.";
       };
       extraConfig = lib.mkOption {
         type = lib.types.lines;
@@ -252,12 +247,12 @@ in
     effectiveFragments = lib.mkOption {
       type = lib.types.attrsOf claimType;
       readOnly = true;
-      apply = validateClaims;
+      apply = validateClaims true;
       description = "Validated assembly of site claims and consumer contributions.";
     };
     fragments = lib.mkOption {
       type = lib.types.attrsOf claimType;
-      apply = validateClaims;
+      apply = validateClaims false;
       default = { };
       description = "Consumer-owned Caddy virtual-host declarations.";
     };

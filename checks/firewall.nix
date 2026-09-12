@@ -22,9 +22,26 @@ let
   };
   consumer = consume { instances.firewall = fixture; };
   firewallConfig = consumer.machine;
+  stricterConsumer = consume {
+    instances.firewall = fixture;
+    extraModule.services.openssh.settings.AuthenticationMethods = "publickey,publickey";
+  };
   missingAddress = consume {
     instances.firewall = instance "network-firewall" "host" { bootstrapSsh.enable = true; };
   };
+  invalidAddress =
+    address:
+    builtins.tryEval
+      (consume {
+        instances.firewall = instance "network-firewall" "host" {
+          bootstrapSsh = {
+            enable = true;
+            publicIPv4 = address;
+          };
+        };
+      }).machine.system.build.toplevel.drvPath;
+  malformedAddress = invalidAddress "999.0.2.2";
+  nonCanonicalAddress = invalidAddress "192.000.2.2";
   enabledTables = lib.filterAttrs (_: table: table.enable) firewallConfig.networking.nftables.tables;
   tableDeletion = _: table: ''
     table ${table.family} ${table.name}
@@ -86,7 +103,12 @@ in
     && !firewallConfig.services.openssh.settings.PasswordAuthentication
     && !firewallConfig.services.openssh.settings.KbdInteractiveAuthentication
     && firewallConfig.services.openssh.settings.AuthenticationMethods == "publickey"
+    && stricterConsumer.valid
+    && stricterConsumer.evaluated
+    && stricterConsumer.machine.services.openssh.settings.AuthenticationMethods == "publickey,publickey"
   );
-  firewall-invalid-bootstrap = gate "network-firewall-invalid-bootstrap" (!missingAddress.valid);
+  firewall-invalid-bootstrap = gate "network-firewall-invalid-bootstrap" (
+    !missingAddress.valid && !malformedAddress.success && !nonCanonicalAddress.success
+  );
   firewall-runtime = runtime;
 }

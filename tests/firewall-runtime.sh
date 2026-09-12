@@ -125,29 +125,44 @@ probe4 192.0.2.2 22
 
 printf '%s\n' "$(( $(date +%s) + 30 ))" > "$MARKER_PATH"
 chmod 0666 "$MARKER_PATH"
-! "$REFRESH"
+"$REFRESH" 2> "$out/invalid-marker.log"
+grep -q 'network bootstrap SSH disabled: marker is group/world writable' "$out/invalid-marker.log"
 ! probe4 192.0.2.2 22
+! "$RENEW" 2> "$out/unsafe-renewal.log"
+grep -q 'network bootstrap SSH renewal refuses unsafe marker' "$out/unsafe-renewal.log"
 chmod 0600 "$MARKER_PATH"
 : > "$MARKER_PATH"
-! "$REFRESH"
+"$REFRESH"
 ! probe4 192.0.2.2 22
 printf '09\n' > "$MARKER_PATH"
-! "$REFRESH"
+"$REFRESH"
 ! probe4 192.0.2.2 22
 rm -f -- "$MARKER_PATH"
 marker_target="$(dirname -- "$MARKER_PATH")/symlink-target"
 printf '%s\n' "$(( $(date +%s) + 30 ))" > "$marker_target"
 ln -s "$marker_target" "$MARKER_PATH"
-! "$REFRESH"
+"$REFRESH"
 ! probe4 192.0.2.2 22
 rm -f -- "$MARKER_PATH" "$marker_target"
 printf '%s\n' "$(( $(date +%s) + 7200 ))" > "$MARKER_PATH"
-! "$REFRESH"
+"$REFRESH"
 ! probe4 192.0.2.2 22
 
 rm -f -- "$MARKER_PATH"
 "$REFRESH"
 ! probe4 192.0.2.2 22
+
+# Marker validation converges closed with success, but nftables lifecycle
+# failures remain visible to systemd and operators.
+printf 'invalid\n' > "$MARKER_PATH"
+nft delete table inet nixos-fw
+if "$REFRESH" 2> "$out/nft-failure.log"; then
+  echo 'bootstrap refresh hid a real nftables failure' >&2
+  exit 1
+fi
+grep -q 'network bootstrap SSH disabled: marker deadline is not a decimal Unix epoch' "$out/nft-failure.log"
+rm -f -- "$MARKER_PATH"
+nft -f "$APPLY_RULES"
 
 nft -f "$STOP_RULES"
 nft -f "$STOP_RULES"

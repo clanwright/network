@@ -6,6 +6,7 @@
     readme = builtins.readFile ./README.md;
   };
   roles.ingress = {
+    description = "Run the pinned Caddy ingress with consumer-owned site claims";
     interface = _: { };
     perInstance = _: {
       nixosModule = { config, pkgs, ... }: {

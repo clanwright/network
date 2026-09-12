@@ -10,6 +10,7 @@ _: _: {
     interface =
       { lib, ... }:
       let
+        inherit (import ../../lib/types.nix { inherit lib; }) ipv4;
         portSettings = lib.types.submodule {
           options.allowedTCPPorts = lib.mkOption {
             type = lib.types.listOf lib.types.port;
@@ -41,7 +42,7 @@ _: _: {
               default = false;
             };
             publicIPv4 = lib.mkOption {
-              type = lib.types.nullOr (lib.types.strMatching "[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+");
+              type = lib.types.nullOr ipv4;
               default = null;
             };
             markerPath = lib.mkOption {

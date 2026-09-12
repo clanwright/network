@@ -9,13 +9,13 @@ Exactly two distinct IPv4 addresses share the prefix on the MAC-pinned interface
 Native networkd receives a default gateway and a secondary-source IPv4 rule and
 default route with that secondary address as preferred source.
 `rulePriority` defaults 10010. `waitOnline.enable` defaults true and
-`waitOnline.timeout` defaults 60 seconds; wait-online targets this interface at
-routable state, with anyInterface disabled.
+`waitOnline.timeout` defaults 60 seconds; a dedicated readiness unit targets
+this interface at routable state. Consumer-owned global networkd wait-online
+enablement, any-interface policy, arguments and timeout remain unchanged.
 
 `enableIPv6` defaults null (no global override); set false to preserve the
 original IPv4-only policy. The module explicitly selects systemd-networkd.
-Claims reject duplicate WAN interface ownership and conflicting table IDs or
-names across selected instances. A host may select at most one static WAN
+Claims reject duplicate WAN interface ownership. A host may select at most one static WAN
 instance, while that instance may retain two IPv4 addresses on its one physical
 interface. Physical MAC ownership is case-insensitive and unique even when two
 claims use different interface names. IPv4 settings use canonical dotted-decimal

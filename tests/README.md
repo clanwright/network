@@ -12,15 +12,18 @@ The same evaluation-only predicates are available to the native macOS
 remain mandatory for runtime/release acceptance.
 
 Negative fixtures reject competing WAN owners, invalid addresses, duplicate
-MACs/interfaces/tables, multiple static WAN instances, invalid bootstrap
+MACs/interfaces, multiple static WAN instances, invalid bootstrap
 settings, overlapping Caddy listeners, public roots without exactly one owner,
-undeclared renewal targets and inconsistent certificate ownership.
+undeclared renewal targets and inconsistent certificate ownership. Composition
+checks preserve consumer SSH authentication and global wait-online policy, and
+leave unrelated native ACME notification lists unchanged.
 
 Runtime derivations execute on the existing x86_64-linux builder with isolated
 processes and namespaces. Namespace creation failure fails the gate. They do not
 boot VMs or contact a real DNS/ACME provider.
 
-- Caddy checks the built plugin inventory and validates the generated Caddyfile.
+- Caddy checks the built plugin inventory, validates the generated Caddyfile and
+  runs requests against that generated configuration.
   It retains forwardproxy and ratelimit, removes layer4, and uses h1/h2.
   Actual HTTP requests cover all three Vaultwarden authentication paths:
   fourteen successes, then rate limiting, with an adjacent route unaffected.

@@ -1,12 +1,16 @@
-{ settings }: { lib, ... }: {
+{ settings }:
+{
+  config,
+  lib,
+  ...
+}:
+{
   imports = [ ./wan-claims.nix ];
   networkCore.wan.claims = [
     {
       owner = "static:${settings.interface}";
       inherit (settings) interface macAddress;
       mode = "static";
-      tableId = settings.routeTableId;
-      tableName = settings.routeTableName;
     }
   ];
   assertions = [
@@ -46,35 +50,50 @@
       inherit (settings) interface;
     };
   };
-  systemd.network = {
-    links."10-${settings.interface}" = {
-      matchConfig.MACAddress = settings.macAddress;
-      linkConfig.Name = settings.interface;
-    };
-    wait-online = {
-      enable = lib.mkForce settings.waitOnline.enable;
-      anyInterface = lib.mkForce false;
-      extraArgs = [ "--interface=${settings.interface}:routable" ];
-      timeout = settings.waitOnline.timeout;
-    };
-    config.routeTables.${settings.routeTableName} = settings.routeTableId;
-    networks."40-${settings.interface}" = {
-      routingPolicyRules = [
-        {
-          Family = "ipv4";
-          From = "${settings.secondaryIPv4}/32";
-          Table = settings.routeTableName;
-          Priority = settings.rulePriority;
-        }
+  systemd = {
+    services.network-wan-static-wait-online = lib.mkIf settings.waitOnline.enable {
+      description = "Wait for the Network static WAN interface";
+      documentation = [ "man:systemd-networkd-wait-online.service(8)" ];
+      wantedBy = [ "network-online.target" ];
+      before = [
+        "network-online.target"
+        "shutdown.target"
       ];
-      routes = [
-        {
-          Destination = "0.0.0.0/0";
-          Gateway = settings.gateway;
-          Table = settings.routeTableName;
-          PreferredSource = settings.secondaryIPv4;
-        }
-      ];
+      requires = [ "systemd-networkd.service" ];
+      after = [ "systemd-networkd.service" ];
+      conflicts = [ "shutdown.target" ];
+      unitConfig.DefaultDependencies = false;
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        TimeoutStartSec = settings.waitOnline.timeout + 5;
+        ExecStart = "${config.systemd.package}/lib/systemd/systemd-networkd-wait-online --interface=${settings.interface}:routable --timeout=${toString settings.waitOnline.timeout}";
+      };
+    };
+    network = {
+      links."10-${settings.interface}" = {
+        matchConfig.MACAddress = settings.macAddress;
+        linkConfig.Name = settings.interface;
+      };
+      config.routeTables.${settings.routeTableName} = settings.routeTableId;
+      networks."40-${settings.interface}" = {
+        routingPolicyRules = [
+          {
+            Family = "ipv4";
+            From = "${settings.secondaryIPv4}/32";
+            Table = settings.routeTableName;
+            Priority = settings.rulePriority;
+          }
+        ];
+        routes = [
+          {
+            Destination = "0.0.0.0/0";
+            Gateway = settings.gateway;
+            Table = settings.routeTableName;
+            PreferredSource = settings.secondaryIPv4;
+          }
+        ];
+      };
     };
   };
 }

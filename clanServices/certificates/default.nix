@@ -6,6 +6,7 @@
     readme = builtins.readFile ./README.md;
   };
   roles.server = {
+    description = "Issue and renew local Timeweb DNS-01 certificates";
     interface = { lib, ... }: {
       options = {
         email = lib.mkOption {
