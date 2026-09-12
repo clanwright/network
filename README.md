@@ -27,6 +27,9 @@ Documentation index:
 - [Release and consumer adoption](docs/operations/release.md)
 - [Deferred work](docs/backlog.md)
 - [Contributor instructions](AGENTS.md)
+- [Agent issue tracker](docs/agents/issue-tracker.md)
+- [Agent triage labels](docs/agents/triage-labels.md)
+- [Agent domain documentation rules](docs/agents/domain.md)
 
 TCP performance policy is owned by the consumer VPN domain. The breaking
 Network candidate removes the former TCP-tuning role; coordinate its migration

@@ -27,3 +27,20 @@ Provider/DNS, live ACME, deploy, backup writer, restore/prune, and credential or
 secret mutations require separate explicit owner approval. Local checks do not
 authorize those actions. Release and consumer adoption are separate transactions;
 do not describe an unverified checkout as released.
+
+## Agent skills
+
+### Issue tracker
+
+Track work in GitHub Issues for `clanwright/network`.
+Before issue operations, read `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Use the five canonical triage labels.
+Before triage, read `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Use a single-context layout.
+Before domain exploration or recording decisions, read `docs/agents/domain.md`.
