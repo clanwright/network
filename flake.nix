@@ -50,6 +50,7 @@
             "consumer-wan-static"
             "consumer-wildcard"
             "firewall-invalid-bootstrap"
+            "firewall-private-ingress-contracts"
             "incompatible-certificate-reload"
             "static-site-contracts"
             "wan-selection-contracts"

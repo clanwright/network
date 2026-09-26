@@ -80,23 +80,29 @@ sleep 0.2
 
 probe4() { nsenter -t "$client_pid" -n nc -4 -z -w 1 "$1" "$2"; }
 probe6() { nsenter -t "$client_pid" -n nc -6 -z -w 1 "$1" "$2"; }
+expect_failure() {
+  if "$@"; then
+    echo "unexpected success: $*" >&2
+    exit 1
+  fi
+}
 
 probe4 192.0.2.2 443
 probe6 2001:db8:1::2 443
 probe4 198.51.100.2 22
 probe6 2001:db8:2::2 22
 
-! probe4 192.0.2.2 80
-! probe6 2001:db8:1::2 80
-! probe4 192.0.2.2 22
-! probe6 2001:db8:1::2 22
+expect_failure probe4 192.0.2.2 80
+expect_failure probe6 2001:db8:1::2 80
+expect_failure probe4 192.0.2.2 22
+expect_failure probe6 2001:db8:1::2 22
 
 printf '%s\n' "$(( $(date +%s) + 5 ))" > "$MARKER_PATH"
 chmod 0600 "$MARKER_PATH"
 "$REFRESH"
 nft list set inet nixos-fw bootstrap_ssh_v4 > "$out/bootstrap-active.nft"
 probe4 192.0.2.2 22
-! probe6 2001:db8:1::2 22
+expect_failure probe6 2001:db8:1::2 22
 
 # An accept in the native chain is still subject to a later base-chain drop,
 # matching nftables/fail2ban composition semantics.
@@ -108,7 +114,7 @@ table inet later_security_drop {
   }
 }
 EOF
-! probe4 192.0.2.2 22
+expect_failure probe4 192.0.2.2 22
 nft delete table inet later_security_drop
 probe4 192.0.2.2 22
 
@@ -116,7 +122,7 @@ nft -f "$APPLY_RULES"
 "$REFRESH"
 probe4 192.0.2.2 22
 sleep 6
-! probe4 192.0.2.2 22
+expect_failure probe4 192.0.2.2 22
 
 printf '%s\n' "$(( $(date +%s) - 1 ))" > "$MARKER_PATH"
 chmod 0600 "$MARKER_PATH"
@@ -127,30 +133,30 @@ printf '%s\n' "$(( $(date +%s) + 30 ))" > "$MARKER_PATH"
 chmod 0666 "$MARKER_PATH"
 "$REFRESH" 2> "$out/invalid-marker.log"
 grep -q 'network bootstrap SSH disabled: marker is group/world writable' "$out/invalid-marker.log"
-! probe4 192.0.2.2 22
-! "$RENEW" 2> "$out/unsafe-renewal.log"
+expect_failure probe4 192.0.2.2 22
+expect_failure "$RENEW" 2> "$out/unsafe-renewal.log"
 grep -q 'network bootstrap SSH renewal refuses unsafe marker' "$out/unsafe-renewal.log"
 chmod 0600 "$MARKER_PATH"
 : > "$MARKER_PATH"
 "$REFRESH"
-! probe4 192.0.2.2 22
+expect_failure probe4 192.0.2.2 22
 printf '09\n' > "$MARKER_PATH"
 "$REFRESH"
-! probe4 192.0.2.2 22
+expect_failure probe4 192.0.2.2 22
 rm -f -- "$MARKER_PATH"
 marker_target="$(dirname -- "$MARKER_PATH")/symlink-target"
 printf '%s\n' "$(( $(date +%s) + 30 ))" > "$marker_target"
 ln -s "$marker_target" "$MARKER_PATH"
 "$REFRESH"
-! probe4 192.0.2.2 22
+expect_failure probe4 192.0.2.2 22
 rm -f -- "$MARKER_PATH" "$marker_target"
 printf '%s\n' "$(( $(date +%s) + 7200 ))" > "$MARKER_PATH"
 "$REFRESH"
-! probe4 192.0.2.2 22
+expect_failure probe4 192.0.2.2 22
 
 rm -f -- "$MARKER_PATH"
 "$REFRESH"
-! probe4 192.0.2.2 22
+expect_failure probe4 192.0.2.2 22
 
 # Marker validation converges closed with success, but nftables lifecycle
 # failures remain visible to systemd and operators.
@@ -166,7 +172,7 @@ nft -f "$APPLY_RULES"
 
 nft -f "$STOP_RULES"
 nft -f "$STOP_RULES"
-! nft list table inet nixos-fw >/dev/null 2>&1
-! nft list table inet network-edge-policy >/dev/null 2>&1
+expect_failure nft list table inet nixos-fw >/dev/null 2>&1
+expect_failure nft list table inet network-edge-policy >/dev/null 2>&1
 nft list table inet unrelated_runtime > "$out/unrelated-after-teardown.nft"
 INNER

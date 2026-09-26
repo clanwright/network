@@ -1,10 +1,13 @@
 { settings }:
-{ lib, ... }:
+{ config, lib, ... }:
 let
   bootstrap = settings.bootstrapSsh;
 in
 {
-  imports = lib.optional bootstrap.enable (import ./bootstrap-ssh.nix { inherit settings; });
+  imports = [
+    ./private-ingress.nix
+  ]
+  ++ lib.optional bootstrap.enable (import ./bootstrap-ssh.nix { inherit settings; });
 
   assertions = [
     {
@@ -26,16 +29,19 @@ in
         }
       ''
     );
-    tables.network-edge-policy = lib.mkIf settings.rejectHttp {
-      family = "inet";
-      content = ''
-        chain input_guard {
-          type filter hook input priority filter - 10; policy accept;
+    tables.network-edge-policy =
+      lib.mkIf (settings.rejectHttp || config.networkCore.firewall.privateIngressClaims != { })
+        {
+          family = "inet";
+          content = ''
+            chain input_guard {
+              type filter hook input priority filter - 10; policy accept;
 
-          iifname != "lo" tcp dport 80 drop comment "network: reject non-loopback HTTP"
-        }
-      '';
-    };
+              ${lib.optionalString settings.rejectHttp ''iifname != "lo" tcp dport 80 drop comment "network: reject non-loopback HTTP"''}
+              ${config.networkCore.firewall.privateIngressRules}
+            }
+          '';
+        };
   };
 
   services.openssh.openFirewall = false;

@@ -89,13 +89,23 @@ Firewall ports compose through native NixOS contributions on the nftables
 backend. Legacy iptables policy is not supported by this candidate. Core owns exposure
 policy, including selection and lifecycle of the optional bootstrap SSH marker;
 Network neither creates that marker nor implicitly grants public SSH access.
+Applications may contribute typed `networkCore.firewall.privateIngressClaims`
+keyed by caller identity while core selects the Firewall role. Each claim binds
+an explicit private IPv4 destination to trusted incoming interfaces; loopback
+is implicit. Network drops all other ingress to that destination before native
+and Tailscale accepts, across protocols and ports, without adding an accept.
+Identical normalized claims compose; conflicting interface sets for an address
+fail evaluation. Core supplies actual addresses and interfaces and retains
+Tailscale grants and deployment ownership.
 Bootstrap disables password and keyboard-interactive authentication and defaults
 to public-key authentication, preserving an explicit stricter consumer method.
 Rejected markers close the temporary opening and produce a diagnostic; failure
 to apply nftables changes remains an error.
 
-Remote private administration requires binding claims to the actual Tailscale address
-and enforcing the incoming `tailscale0` path in the consumer firewall. The former
+Remote private administration requires binding services to the actual Tailscale
+IPv4 address and contributing a `privateIngressClaims` entry that trusts
+`tailscale0` through the selected Network Firewall role. The consumer retains
+Tailscale grants and application HTTP policy, including any `/admin` routing. The former
 `tailnet_only` CGNAT-source snippet is removed: a source range alone does not
 authenticate tailnet membership. Core also owns Tailscale grants/ACL policy.
 Bootstrap deadlines and handoff procedures are specified by the Firewall service

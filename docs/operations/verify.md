@@ -65,6 +65,7 @@ check_name=certificates-caddy-integration
 | `consumer-static-site`, `static-site-contracts` | Static-site role selection, artifact context, multiple claims, certificate/listener requirements and incompatible attachments |
 | `static-site-runtime`, `static-site-invalid-artifacts` | Generated static hosting, alias/404/proxy behavior and build-time artifact rejection |
 | `firewall-invalid-bootstrap`, `firewall-runtime` | Bootstrap settings and native nftables packet/lifecycle checks |
+| `firewall-private-ingress-contracts`, `firewall-private-ingress-runtime` | Typed private IPv4 claim composition, invalid/conflicting claims, and isolated ingress packet/lifecycle checks |
 | `wan-selection-contracts`, `wan-dhcp-runtime`, `wan-static-runtime` | Interface/MAC ownership, one static WAN, readiness policy composition, actual networkd addressing and carrier recovery |
 
 Build every Linux check explicitly for release acceptance:
@@ -113,7 +114,8 @@ mock HTTP API, covering CNAME targets, record creation, cleanup and failures.
 
 Firewall checks use full evaluated native tables and actual packets in isolated
 namespaces. They test bootstrap expiration without firewall reload, renewal,
-revocation, reload, IPv4/IPv6 HTTP blocking and preservation of unrelated tables.
+revocation, reload, IPv4/IPv6 HTTP blocking, private IPv4 destination guards,
+claim removal and preservation of unrelated tables.
 WAN checks exercise native networkd leases, routing and carrier recovery; physical
 NIC/udev renaming and production boot order still require machine acceptance.
 Local checks never establish deployed host connectivity or stunnel readiness.
