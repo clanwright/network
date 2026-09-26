@@ -42,6 +42,16 @@ in
     gate
     ;
 }
+// import ./static-site.nix {
+  inherit
+    self
+    inputs
+    pkgs
+    consume
+    instance
+    gate
+    ;
+}
 // import ./firewall.nix {
   inherit
     self

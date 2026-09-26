@@ -2,8 +2,8 @@
 
 Checks select raw Clan module IDs through an isolated synthetic consumer.
 They force assertions, generated systemd units and the NixOS top-level
-configuration without building or booting that host. Each primary capability
-is selectable alone; wildcard claims require Certificates without implicitly
+configuration without building or booting that host. Runtime capabilities
+are separately selectable; static sites require Caddy, and wildcard claims require Certificates without implicitly
 selecting Caddy or adding reload consumers. Combined Certificates/Caddy checks
 cover native reload registration and deduplication.
 
@@ -27,7 +27,11 @@ boot VMs or contact a real DNS/ACME provider.
   It retains forwardproxy and ratelimit, removes layer4, and uses h1/h2.
   Actual HTTP requests cover all three Vaultwarden authentication paths:
   fourteen successes, then rate limiting, with an adjacent route unaffected.
-  Forwardproxy presence and composition are checked; CONNECT traffic is not.
+  The static-site runtime check additionally covers canonical content, alias
+  redirects, custom and fallback 404 responses, independent artifacts and
+  authenticated CONNECT through the contributed proxy handler. Artifact
+  validation rejects missing/invalid content before activation. These synthetic
+  contributions exercise the Network boundary, not a deployed VPN client.
 - Firewall loads the full evaluated native nftables tables and sends real
   packets through isolated interfaces. It covers public/tailnet ports,
   IPv4/IPv6 HTTP rejection, key-only bootstrap configuration, absolute-deadline

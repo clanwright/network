@@ -1,6 +1,6 @@
 # Release and consumer adoption
 
-Network releases five capabilities, the wildcard compatibility adapter, contracts
+Network releases six capabilities, the wildcard compatibility adapter, contracts
 and locked packages together. Breaking public-contract changes require a major
 version; compatible capabilities a minor version; compatible fixes a patch.
 There is no hosted CI, automatic merge or automatic release.

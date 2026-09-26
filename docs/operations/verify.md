@@ -62,6 +62,8 @@ check_name=certificates-caddy-integration
 | `acme-local-renewal` | Native issuance/renewal against local Pebble; running Caddy serves the renewed certificate |
 | `caddy-contribution-dependencies`, `caddy-wildcard-listener-collisions`, `caddy-public-site-owner` | Fragment composition, listener collision and public-root ownership |
 | `caddy-module-inventory`, `caddy-config`, `caddy-ratelimit-runtime` | Exact plugin inventory, rendered config validation and rate-limited HTTP requests |
+| `consumer-static-site`, `static-site-contracts` | Static-site role selection, artifact context, multiple claims, certificate/listener requirements and incompatible attachments |
+| `static-site-runtime`, `static-site-invalid-artifacts` | Generated static hosting, alias/404/proxy behavior and build-time artifact rejection |
 | `firewall-invalid-bootstrap`, `firewall-runtime` | Bootstrap settings and native nftables packet/lifecycle checks |
 | `wan-selection-contracts`, `wan-dhcp-runtime`, `wan-static-runtime` | Interface/MAC ownership, one static WAN, readiness policy composition, actual networkd addressing and carrier recovery |
 

@@ -13,7 +13,9 @@ concrete IPv4 listeners; the consumer owns its tailnet address and firewall
 enforcement; Network does not infer privacy from `publicSite = false`. Caddy
 rejects normalized host overlaps on shared listeners. Routes render in order:
 `preRouteConfigFragments`, `extraConfig`, `extraConfigFragments`. Consumers own
-all route text, static roots, and runtime fragment generation.
+custom route text and runtime fragment generation. The optional
+[static-site role](../static-site/README.md) supplies Network-owned static hosting
+claims for independently built artifacts through this same interface.
 
 `logFile` is an absolute path whose segments may contain ASCII letters, digits,
 dot, underscore, plus, and hyphen. Empty and dot segments, whitespace, control

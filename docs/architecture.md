@@ -1,7 +1,7 @@
 # Architecture
 
 Network supplies the implementation, defaults, package versions and contracts
-for five separately selected Clan capabilities. It is a ready-made personal stack
+for six separately selected Clan capabilities. It is a ready-made personal stack
 with Timeweb DNS-01, the Network Caddy build and native NixOS/networkd composition.
 Only x86_64-linux is supported. The optional Darwin formatter does not expand
 that runtime boundary.
@@ -15,14 +15,18 @@ to bypass the contract.
 
 Selection is independent: Certificates has no implicit Caddy dependency; Caddy
 needs declared ACME certificates but does not select Certificates or Firewall.
+Static sites generate hosting claims and require a separately selected Caddy
+ingress; they do not select VPN, certificates or exposure policy.
 Firewall does not select Access. WAN may be configured externally. Core profiles
 choose mandatory capabilities and public exposure; Network checks technical
 compatibility. VPN consumers own TCP performance policy; Network does not set congestion control or qdisc defaults.
 
 Certificates uses one Network-owned patched Lego package with Timeweb API v2
 on every participating host. Issuance, keys and renewal stay local through native
-NixOS ACME. Caddy owns its base runtime and validation; the service consumer owns
-site and NaiveProxy route fragments. Native nftables firewall and networkd facilities remain the primary host implementation.
+NixOS ACME. Caddy owns its base runtime and validation. Static sites own the
+reusable static hosting recipe; website repositories own their builds and
+artifacts. Consumers select those artifacts and may also supply custom site and
+NaiveProxy route fragments. Native nftables firewall and networkd facilities remain the primary host implementation.
 Bootstrap SSH uses a bounded, explicitly renewable deadline; permanent recovery
 transport remains Access-owned. Certificates share read access with consumers,
 while the DNS credential is readable only by the ACME owner. A compromise of

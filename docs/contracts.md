@@ -49,6 +49,27 @@ NaiveProxy configuration, authentication and route generation; Caddy does not
 invent them. Referenced certificates must exist. Caddy renewal registration is
 native; other service notifications remain explicit. See the service reference for claim fields and fragment ordering.
 
+## Static sites
+
+The static-site role consumes an already-built, immutable Nix static directory.
+The website owns source, dependency pins, build tools and output. The consumer
+selects the artifact, canonical host, aliases, existing certificate, listener,
+placement and public claim identity. Network validates the artifact at build
+time and owns file serving, browser alias redirects and real HTTP 404 responses.
+It does not build the website, fetch content at runtime or provide SPA fallback.
+
+Each instance emits one Caddy claim through the existing ownership and conflict
+checks. Select the Caddy ingress separately. A public instance supports existing
+NaiveProxy contributions to its explicit claim name; Network does not add proxy
+authentication or routing. A second nonpublic instance can serve the same
+artifact on a secondary host. Nonpublic metadata does not imply network privacy.
+
+The consumer must select a certificate covering every served host and redirect
+alias, including secondary instances. Referencing an existing certificate does
+not prove the deployed certificate's SANs. Domain and exposure approval remain
+with the consumer/core. See the [role reference](../clanServices/static-site/README.md)
+for settings and migration.
+
 ## Host networking
 
 Core supplies actual interface/MAC/address/gateway/table data. DHCP and static

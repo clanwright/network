@@ -21,6 +21,7 @@
         "@clanwright/network-certificates" = service ./clanServices/certificates/default.nix;
         "@clanwright/edge-wildcard-certificate" = service ./clanServices/wildcard-certificate/default.nix;
         "@clanwright/network-caddy" = service ./clanServices/caddy/default.nix;
+        "@clanwright/network-static-site" = service ./clanServices/static-site/default.nix;
         "@clanwright/network-firewall" = service ./clanServices/firewall/default.nix;
         "@clanwright/network-wan-dhcp" = service ./clanServices/wan-dhcp/default.nix;
         "@clanwright/network-wan-static" = service ./clanServices/wan-static/default.nix;
@@ -44,11 +45,13 @@
             "consumer-caddy"
             "consumer-certificates"
             "consumer-firewall"
+            "consumer-static-site"
             "consumer-wan-dhcp"
             "consumer-wan-static"
             "consumer-wildcard"
             "firewall-invalid-bootstrap"
             "incompatible-certificate-reload"
+            "static-site-contracts"
             "wan-selection-contracts"
           ];
           contracts = nixpkgs.lib.mapAttrs (_: check: check.contract) (
