@@ -96,6 +96,15 @@ test -z "$(git status --porcelain)"
 
 ## Consumer adoption
 
+The Lego 5 package requires a consumer nixpkgs whose native NixOS ACME module
+supports Lego 5 commands and v4 account migration. Update the consumer nixpkgs
+before adopting this package update; updating only the Network input is not
+sufficient. Network rejects generated ACME scripts without migration and
+v5 run support, including unrelated native certificates because they
+share the Lego package. The local renewal gate checks migration of a synthetic
+v4 account layout while preserving its account URL and key identity. It does
+not establish live provider acceptance.
+
 Adoption follows publication. Pin the verified released tag, retain the resolved
 revision in the consumer lock, migrate the typed settings and remove superseded
 implementation. Compare evaluated behavior, build affected production closures

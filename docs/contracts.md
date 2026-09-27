@@ -25,8 +25,9 @@ The Certificates role takes an ACME contact email and a named SOPS interface.
 Network declares runtime access and passes only the resolved SOPS path to Lego;
 core supplies encrypted values through its SOPS configuration. No credentials
 belong in examples, Nix strings, logs or this repository's documentation. The
-interface name is configurable; the supported provider and patched package are
-Network-owned. The credential is owned by `acme` with mode `0400`; certificate
+interface name is configurable; the supported provider and exact Lego package are
+Network-owned. A consumer selecting Certificates must use a native NixOS ACME
+module compatible with Lego 5 for every certificate on that host. The credential is owned by `acme` with mode `0400`; certificate
 readers must not inherit credential access. Root compromise on an issuing host
 can still expose DNS API privileges; this accepted boundary does not claim
 zone isolation. Native NixOS Caddy registers its reload automatically for each `useACMEHost`;

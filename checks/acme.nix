@@ -120,6 +120,21 @@ let
     inherit instances;
     extraModule = base;
   };
+  legacyClaimOrder = consume {
+    inherit instances;
+    extraModule = { lib, ... }: {
+      imports = [ base ];
+      systemd.services.acme-order-renew-fixture.script = lib.mkForce "lego renew --renew-hook old-hook";
+    };
+  };
+  legacyExternalOrder = consume {
+    inherit instances;
+    extraModule = { lib, ... }: {
+      imports = [ base ];
+      security.acme.certs.external.webroot = "/var/lib/acme-challenges";
+      systemd.services.acme-order-renew-external.script = lib.mkForce "lego renew --renew-hook old-hook";
+    };
+  };
   combinedInstances = instances // {
     caddy = {
       module = {
@@ -185,9 +200,15 @@ let
     };
   };
   unit = fixture.machine.systemd.services.acme-order-renew-fixture;
+  rejectsLegacyAcme =
+    evaluated:
+    builtins.any (
+      assertion: !assertion.assertion && lib.hasPrefix "Network Lego 5 requires" assertion.message
+    ) evaluated.machine.assertions;
   contract =
     production.valid
     && production.evaluated
+    && rejectsLegacyAcme legacyClaimOrder
     && production.machine.security.acme.certs.fixture.dnsProvider == "timewebcloud"
     && production.machine.security.acme.certs.fixture.reloadServices == [ "fixture-consumer.service" ]
     &&
@@ -196,6 +217,7 @@ let
   combinedContract =
     combined.valid
     && combined.evaluated
+    && rejectsLegacyAcme legacyExternalOrder
     && combined.machine.sops.secrets.timeweb-dns-api-token.owner == "acme"
     && combined.machine.sops.secrets.timeweb-dns-api-token.group == "acme"
     && combined.machine.sops.secrets.timeweb-dns-api-token.mode == "0400"
@@ -252,6 +274,7 @@ in
           pkgs.curl
           pkgs.bash
           pkgs.diffutils
+          pkgs.jq
           self.packages.x86_64-linux.caddy-custom
           self.packages.x86_64-linux.lego
         ];

@@ -43,6 +43,18 @@ let
   };
   claims = config.networkCore.acme.certificateClaims;
   package = self.packages.x86_64-linux.lego;
+  # The consumer owns the native ACME module, while the package overlay affects
+  # every certificate. There is no native module capability option for Lego 5;
+  # fail closed unless its generated scripts support migration and v5 commands.
+  nativeAcmeCompatible = builtins.all (
+    name:
+    let
+      script = config.systemd.services."acme-order-renew-${name}".script or "";
+    in
+    lib.hasInfix "lego migrate --account-only" script
+    && lib.hasInfix "lego run " script
+    && lib.hasInfix "--renew-force" script
+  ) (builtins.attrNames config.security.acme.certs);
 in
 {
   options.security.acme.certs = lib.mkOption {
@@ -81,6 +93,10 @@ in
       {
         assertion = pkgs.lego.outPath == package.outPath;
         message = "Network owns the exact Lego package; consumer overrides are unsupported.";
+      }
+      {
+        assertion = nativeAcmeCompatible;
+        message = "Network Lego 5 requires native NixOS ACME with account migration and v5 run support for every certificate. Update the consumer nixpkgs before adopting Network.";
       }
     ];
     nixpkgs.overlays = [ (_final: _previous: { lego = package; }) ];

@@ -70,7 +70,25 @@ test "$(wc -l < "$out/notifications.log")" = 1
 # No renewed marker must produce no duplicate notification.
 bash /tmp/native-postrun
 test "$(wc -l < "$out/notifications.log")" = 1
+# Recreate a v4 account layout from the locally issued account. The next
+# native order must migrate it before renewing the existing certificate.
+account_file=$(find accounts -name account.json -print -quit)
+test -n "$account_file"
+account_dir=${account_file%/*}
+test -e "$account_dir/fixture@example.invalid.key"
+account_url=$(jq -er '.registration.accountURL' "$account_file")
+account_key_digest=$(openssl pkey -in "$account_dir/fixture@example.invalid.key" -pubout -outform DER | sha256sum | cut -d' ' -f1)
+mkdir "$account_dir/keys"
+mv "$account_dir/fixture@example.invalid.key" "$account_dir/keys/"
+jq -e '{email, registration: {body: (.registration | del(.accountURL)), uri: .registration.accountURL}}' \
+  "$account_file" > "$account_file.v4"
+mv "$account_file.v4" "$account_file"
 bash "$ORDER_SCRIPT"
+test -e "$account_dir/fixture@example.invalid.key"
+test ! -e "$account_dir/keys"
+jq -e '.origin == "migration"' "$account_file" >/dev/null
+test "$(jq -er '.registration.accountURL' "$account_file")" = "$account_url"
+test "$(openssl pkey -in "$account_dir/fixture@example.invalid.key" -pubout -outform DER | sha256sum | cut -d' ' -f1)" = "$account_key_digest"
 test -e out/renewed
 openssl x509 -in out/cert.pem -noout -serial > "$out/renewed-serial.txt"
 ! cmp -s "$out/initial-serial.txt" "$out/renewed-serial.txt"

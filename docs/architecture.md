@@ -21,7 +21,7 @@ Firewall does not select Access. WAN may be configured externally. Core profiles
 choose mandatory capabilities and public exposure; Network checks technical
 compatibility. VPN consumers own TCP performance policy; Network does not set congestion control or qdisc defaults.
 
-Certificates uses one Network-owned patched Lego package with Timeweb API v2
+Certificates uses one Network-owned Lego 5 package with Timeweb API v2
 on every participating host. Issuance, keys and renewal stay local through native
 NixOS ACME. Caddy owns its base runtime and validation. Static sites own the
 reusable static hosting recipe; website repositories own their builds and

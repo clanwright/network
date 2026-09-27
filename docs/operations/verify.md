@@ -59,7 +59,7 @@ check_name=certificates-caddy-integration
 | `consumer-certificates`, `consumer-caddy`, `consumer-firewall`, `consumer-wan-dhcp`, `consumer-wan-static` | Independent capability selection through the Clan catalog; evaluated assertions and units |
 | `consumer-wildcard`, `incompatible-certificate-reload`, `certificate-owner-consistency` | Wildcard adapter, reload target and ownership contracts |
 | `certificates-caddy-integration` | Combined native reload registration/deduplication, credential owner/group/mode `acme`/`acme`/`0400`, certificate group `acme`, and Caddy certificate-group membership |
-| `acme-local-renewal` | Native issuance/renewal against local Pebble; running Caddy serves the renewed certificate |
+| `acme-local-renewal` | Native issuance, Lego 4 account migration and renewal against local Pebble; running Caddy serves the renewed certificate |
 | `caddy-contribution-dependencies`, `caddy-wildcard-listener-collisions`, `caddy-public-site-owner` | Fragment composition, listener collision and public-root ownership |
 | `caddy-module-inventory`, `caddy-config`, `caddy-ratelimit-runtime` | Exact plugin inventory, rendered config validation and rate-limited HTTP requests |
 | `consumer-static-site`, `static-site-contracts` | Static-site role selection, artifact context, multiple claims, certificate/listener requirements and incompatible attachments |
