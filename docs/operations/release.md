@@ -96,6 +96,16 @@ test -z "$(git status --porcelain)"
 
 ## Consumer adoption
 
+For the nested-input portability fix, Apps must release a version whose own lock
+adopts the new Network release. Consumers then update Apps and their direct
+Network pin together, retaining identical Apps-owned and root Network/Primitives
+sources. Changing only the root Network input leaves an older Apps dependency
+graph in place. Neither manual lock imports nor consumer source overrides are
+migration steps. Acceptance includes clean initial locking, normal updating of
+an existing valid Apps v0.1.0 lock, module evaluation, source convergence and
+byte-identical relocking on the accepted official Nix versions. Local candidate
+snapshots establish compatibility, not published release adoption.
+
 The Lego 5 package requires a consumer nixpkgs whose native NixOS ACME module
 supports Lego 5 commands and v4 account migration. Update the consumer nixpkgs
 before adopting this package update; updating only the Network input is not

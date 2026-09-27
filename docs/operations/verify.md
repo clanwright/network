@@ -34,6 +34,32 @@ nix eval --offline --json --no-write-lock-file \
   .#lib.checkContracts
 ```
 
+## Nested consumer locking
+
+Run the independent lock-generation gate with the installed Nix and the official
+stable Nix binary being accepted for consumers:
+
+```sh
+python3 checks/nested-consumer-lock.py
+python3 checks/nested-consumer-lock.py --nix /absolute/path/to/official/nix
+```
+
+The gate snapshots the current Network candidate into an isolated Git repository,
+commits an intermediate wrapper's lock, and tests a consumer selecting Network
+both directly and through that wrapper. It uses ordinary fresh locking and an
+existing-lock update, checks exact dependency identities and convergence,
+evaluates Network's module contracts, and requires byte-identical repeated
+locking. No consumer overrides or reconstructed locks are used. Logs and elapsed
+times remain under `.work/verification/nested-lock-unique/`. `--source` can select
+another Network Git checkout, including a pre-fix checkout for reproduction.
+
+This gate covers Network's source graph; it does not replace Apps' own recipe
+checks or coordinated released-tag adoption. In particular, updating an existing
+Apps v0.1.0 consumer to a coordinated Apps/Network release must also pass normally.
+The older relative-stub graph fails fresh nested locking on Nix 2.34.7+1 and
+2.35.2 even when standalone contracts pass. Preserve an accepted consumer lock
+until the new source set passes its adoption gates.
+
 ## Linux runtime and release acceptance
 
 The combined Certificates/Caddy evaluation checks that the provider credential

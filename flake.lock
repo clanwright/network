@@ -2,9 +2,7 @@
   "nodes": {
     "clan-core": {
       "inputs": {
-        "data-mesher": [
-          "data-mesher"
-        ],
+        "data-mesher": [],
         "disko": "disko",
         "flake-parts": "flake-parts",
         "nix-darwin": "nix-darwin",
@@ -29,17 +27,6 @@
         "repo": "clan-core",
         "type": "github"
       }
-    },
-    "data-mesher": {
-      "locked": {
-        "path": "./stubs/data-mesher",
-        "type": "path"
-      },
-      "original": {
-        "path": "./stubs/data-mesher",
-        "type": "path"
-      },
-      "parent": []
     },
     "disko": {
       "inputs": {
@@ -136,7 +123,6 @@
     "root": {
       "inputs": {
         "clan-core": "clan-core",
-        "data-mesher": "data-mesher",
         "nixpkgs": "nixpkgs"
       }
     },

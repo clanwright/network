@@ -2,11 +2,12 @@
   description = "Independently selectable Clan network bricks for the Clanwright stack";
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
-    data-mesher.url = "path:./stubs/data-mesher";
     clan-core = {
       url = "github:clan-lol/clan-core";
       inputs.nixpkgs.follows = "nixpkgs";
-      inputs.data-mesher.follows = "data-mesher";
+      # Keep the unused Clan compatibility module in this source without a
+      # relative flake input, which breaks locking through nested consumers.
+      inputs.data-mesher.follows = "";
     };
   };
   outputs =
@@ -17,6 +18,9 @@
       service = path: nixpkgs.lib.modules.importApply path { inherit self; };
     in
     {
+      # Dependency shim for Clan, not a separately selectable Network service.
+      nixosModules.data-mesher =
+        ((import ./stubs/data-mesher/flake.nix).outputs { }).nixosModules.data-mesher;
       clan.modules = {
         "@clanwright/network-certificates" = service ./clanServices/certificates/default.nix;
         "@clanwright/edge-wildcard-certificate" = service ./clanServices/wildcard-certificate/default.nix;

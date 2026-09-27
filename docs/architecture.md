@@ -13,6 +13,13 @@ than importing implementation modules or replacing packages with overlays.
 A missing setting is a proposed Network change and release, not an invitation
 to bypass the contract.
 
+Clan's unused data-mesher dependency follows Network itself. The
+`nixosModules.data-mesher` output supplies the existing local compatibility stub;
+it is not another supported service. This avoids a relative flake input, which
+Nix 2.34.7+1 and 2.35.2 resolve against the wrong source when Network is nested
+under a locked intermediate consumer such as Apps. The stub remains part of the
+same Network source, and all external dependency revisions remain unchanged.
+
 Selection is independent: Certificates has no implicit Caddy dependency; Caddy
 needs declared ACME certificates but does not select Certificates or Firewall.
 Static sites generate hosting claims and require a separately selected Caddy

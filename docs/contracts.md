@@ -14,6 +14,13 @@ Pin an exact released tag and retain its resolved lock. Do not override Network
 packages, import internal modules, or use a consumer overlay to add a hidden
 setting. New needs change the typed interface through a Network release.
 
+The `nixosModules.data-mesher` flake output is an internal compatibility shim for
+the pinned Clan dependency, not a consumer service interface. Clan's input
+follows the declaring Network flake, including when nested under Apps. There is
+no separate relative data-mesher source to resolve or copy into consumers.
+Consumers must be able to generate and update locks normally; an existing valid
+lock or successful standalone evaluation does not prove that acceptance.
+
 ## Certificates
 
 Consumers contribute `networkCore.acme.certificateClaims`, optional ownership
