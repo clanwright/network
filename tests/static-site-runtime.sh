@@ -37,33 +37,35 @@ cleanup() {
 trap cleanup EXIT
 
 openssl req -x509 -newkey rsa:2048 -nodes -keyout "$key_file" -out "$cert_file" -days 1 -subj /CN=fixture.invalid >/dev/null 2>&1
-sed \
-  -e "s#/var/log/caddy/main-site.log#$runtime_dir/main.log#g" \
-  -e "s#/var/log/caddy/secondary-site.log#$runtime_dir/secondary.log#g" \
-  "$CADDY_CONFIG" > "$runtime_dir/Caddyfile.public"
-
 # The proxy credential exists only in the disposable build directory. Neither
 # this Caddyfile nor its adapted JSON is copied into the check output.
 proxy_password="$(openssl rand -hex 16)"
-awk -v password="$proxy_password" '
-  { print }
-  /^[[:space:]]*forward_proxy[[:space:]]*\{[[:space:]]*$/ {
-    print "    basic_auth fixture " password
-    print "    probe_resistance proxy-fixture.invalid"
-    print "    ports 18081"
-    print "    disable_insecure_upstreams_check"
-    print "    acl {"
-    print "        allow 127.0.0.1/32"
-    print "        deny all"
-    print "    }"
-    found = 1
-  }
-  END { if (!found) exit 1 }
-' "$runtime_dir/Caddyfile.public" > "$runtime_dir/Caddyfile.runtime"
-caddy adapt --config "$runtime_dir/Caddyfile.runtime" --adapter caddyfile > "$runtime_dir/config.runtime.json"
-caddy validate --config "$runtime_dir/config.runtime.json"
-caddy run --config "$runtime_dir/config.runtime.json" > "$runtime_dir/caddy.log" 2>&1 &
-caddy_pid=$!
+prepare_config() {
+  local source="$1" name="$2"
+  sed \
+    -e "s#/var/log/caddy/main-site.log#$runtime_dir/main.log#g" \
+    -e "s#/var/log/caddy/secondary-site.log#$runtime_dir/secondary.log#g" \
+    "$source" > "$runtime_dir/$name.public"
+  awk -v password="$proxy_password" '
+    { print }
+    /^[[:space:]]*forward_proxy[[:space:]]*\{[[:space:]]*$/ {
+      print "    basic_auth fixture " password
+      print "    probe_resistance proxy-fixture.invalid"
+      print "    ports 18081"
+      print "    disable_insecure_upstreams_check"
+      print "    acl {"
+      print "        allow 127.0.0.1/32"
+      print "        deny all"
+      print "    }"
+      found = 1
+    }
+    END { if (!found) exit 1 }
+  ' "$runtime_dir/$name.public" > "$runtime_dir/$name.runtime"
+  caddy adapt --config "$runtime_dir/$name.runtime" --adapter caddyfile > "$runtime_dir/$name.json"
+  caddy validate --config "$runtime_dir/$name.json"
+}
+prepare_config "$CADDY_CONFIG" Caddyfile
+prepare_config "$REPLACEMENT_CADDY_CONFIG" Caddyfile.replacement
 
 request() {
   local host="$1" method="$2" path="$3"
@@ -82,21 +84,29 @@ expect_request() {
   printf '%s: expected=%s actual=%s\n' "$label" "$expected" "$actual"
   test "$actual" = "$expected"
 }
-for _ in {1..50}; do
-  if curl "${curl_args[@]}" --resolve "$main_host:443:127.0.0.1" --fail -o /dev/null "$main_origin/" 2>/dev/null; then
-    break
-  fi
-  sleep 0.1
-done
-kill -0 "$caddy_pid"
+start_caddy() {
+  local config="$1"
+  caddy run --config "$config" >> "$runtime_dir/caddy.log" 2>&1 &
+  caddy_pid=$!
+  for _ in {1..50}; do
+    if curl "${curl_args[@]}" --resolve "$main_host:443:127.0.0.1" --fail -o /dev/null "$main_origin/" 2>/dev/null; then
+      kill -0 "$caddy_pid"
+      return
+    fi
+    sleep 0.1
+  done
+  echo 'Caddy did not serve the main site before the startup deadline' >&2
+  return 1
+}
+start_caddy "$runtime_dir/Caddyfile.json"
 
 expect_request 'main index' 200 "$main_host" GET /
-test "$(cat "$runtime_dir/body")" = 'network static index v1'
+cmp "$ORIGINAL_ARTIFACT/index.html" "$runtime_dir/body"
 expect_request 'main document' 200 "$main_host" GET /docs/page.html
-test "$(cat "$runtime_dir/body")" = 'network static document v1'
+cmp "$ORIGINAL_ARTIFACT/docs/page.html" "$runtime_dir/body"
 expect_request 'main HEAD' 200 "$main_host" HEAD /
 expect_request 'custom missing page' 404 "$main_host" GET /missing
-test "$(cat "$runtime_dir/body")" = 'network custom missing page'
+cmp "$ORIGINAL_ARTIFACT/404.html" "$runtime_dir/body"
 
 expect_request 'alias redirect' 308 "$alias_host" GET '/docs/page.html?x=1&y=2'
 tr -d '\r' < "$runtime_dir/headers" | grep -qiFx "Location: https://$main_host/docs/page.html?x=1&y=2"
@@ -112,7 +122,7 @@ printf 'alias CONNECT bypass: status=%s\n' "$actual"
 test "$actual" != 308
 
 expect_request 'secondary replacement index' 200 "$secondary_host" GET /
-test "$(cat "$runtime_dir/body")" = 'network static index v2'
+cmp "$REPLACEMENT_ARTIFACT/index.html" "$runtime_dir/body"
 expect_request 'secondary fallback missing page' 404 "$secondary_host" GET /missing
 test "$(cat "$runtime_dir/body")" = '404 Not Found'
 actual="$(request unknown.fixture.invalid GET /)"
@@ -162,9 +172,32 @@ proxy_body="$(curl "${proxy_options[@]}" --fail --proxy-user "fixture:$proxy_pas
 test "$proxy_body" = 'network proxy origin response'
 echo 'authenticated absolute-form GET through alias endpoint reached local origin'
 
+kill "$caddy_pid"
+wait "$caddy_pid" 2>/dev/null || true
+caddy_pid=
+start_caddy "$runtime_dir/Caddyfile.replacement.json"
+expect_request 'replacement main index' 200 "$main_host" GET /
+cmp "$REPLACEMENT_ARTIFACT/index.html" "$runtime_dir/body"
+expect_request 'removed document fallback' 404 "$main_host" GET /docs/page.html
+printf '404 Not Found\n' | cmp - "$runtime_dir/body"
+expect_request 'replacement alias redirect' 308 "$alias_host" GET '/docs/page.html?x=1&y=2'
+tr -d '\r' < "$runtime_dir/headers" | grep -qiFx "Location: https://$main_host/docs/page.html?x=1&y=2"
+expect_request 'replacement alias HEAD redirect' 308 "$alias_host" HEAD '/docs/page.html?x=1'
+tr -d '\r' < "$runtime_dir/headers" | grep -qiFx "Location: https://$main_host/docs/page.html?x=1"
+proxy_body="$(curl --silent --show-error --fail --proxy-insecure --proxytunnel \
+  --proxy "https://127.0.0.1:443" --proxy-user "fixture:$proxy_password" \
+  --noproxy '' http://127.0.0.1:18081/)"
+test "$proxy_body" = 'network proxy origin response'
+echo 'authenticated CONNECT reached local origin after replacement'
+proxy_body="$(curl "${proxy_options[@]}" --fail --proxy-user "fixture:$proxy_password" \
+  http://127.0.0.1:18081/)"
+test "$proxy_body" = 'network proxy origin response'
+echo 'authenticated absolute-form GET through alias endpoint reached local origin after replacement'
+
 # Retain the public generated declaration and operation logs. Runtime files
 # with the ephemeral proxy credential stay in the disposable build directory.
 cp "$runtime_dir/Caddyfile.public" "$out/Caddyfile.public"
+cp "$runtime_dir/Caddyfile.replacement.public" "$out/Caddyfile.replacement.public"
 cp "$runtime_dir/caddy.log" "$out/caddy.log"
 cp "$runtime_dir/origin.log" "$out/origin.log"
 INNER

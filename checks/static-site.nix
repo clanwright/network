@@ -73,40 +73,47 @@ let
     rejected (withSites {
       primary = settings // override;
     });
-  runtime = withSites {
-    secondary = secondarySettings // {
-      artifact = "${replacement}";
-    };
-    extraModule = {
-      networkCore.caddy.contributions."main-site" = {
-        capabilities = [ "forward-proxy" ];
-        siteAddress = ":443";
-        preRouteConfigFragments = [
-          ''
-            forward_proxy {
-              hide_ip
-              hide_via
-            }
-          ''
-        ];
+  runtimeFor =
+    primaryArtifact:
+    withSites {
+      primary = settings // {
+        artifact = "${primaryArtifact}";
       };
-      services.caddy = {
-        globalConfig = lib.mkAfter "admin off";
-        virtualHosts."main-site" = {
-          useACMEHost = lib.mkForce null;
-          extraConfig = lib.mkAfter ''
-            tls /tmp/network-static-site-cert.pem /tmp/network-static-site-key.pem
-          '';
+      secondary = secondarySettings // {
+        artifact = "${replacement}";
+      };
+      extraModule = {
+        networkCore.caddy.contributions."main-site" = {
+          capabilities = [ "forward-proxy" ];
+          siteAddress = ":443";
+          preRouteConfigFragments = [
+            ''
+              forward_proxy {
+                hide_ip
+                hide_via
+              }
+            ''
+          ];
         };
-        virtualHosts."secondary-site" = {
-          useACMEHost = lib.mkForce null;
-          extraConfig = lib.mkAfter ''
-            tls /tmp/network-static-site-cert.pem /tmp/network-static-site-key.pem
-          '';
+        services.caddy = {
+          globalConfig = lib.mkAfter "admin off";
+          virtualHosts."main-site" = {
+            useACMEHost = lib.mkForce null;
+            extraConfig = lib.mkAfter ''
+              tls /tmp/network-static-site-cert.pem /tmp/network-static-site-key.pem
+            '';
+          };
+          virtualHosts."secondary-site" = {
+            useACMEHost = lib.mkForce null;
+            extraConfig = lib.mkAfter ''
+              tls /tmp/network-static-site-cert.pem /tmp/network-static-site-key.pem
+            '';
+          };
         };
       };
     };
-  };
+  runtime = runtimeFor artifact;
+  replacementRuntime = runtimeFor replacement;
 in
 {
   consumer-static-site = gate "network-consumer-static-site" (
@@ -219,7 +226,8 @@ in
   '';
 
   static-site-runtime =
-    assert runtime.valid && runtime.evaluated;
+    assert
+      runtime.valid && runtime.evaluated && replacementRuntime.valid && replacementRuntime.evaluated;
     pkgs.runCommand "network-static-site-runtime"
       {
         nativeBuildInputs = [
@@ -236,6 +244,9 @@ in
         mkdir -p "$out"
         export out
         export CADDY_CONFIG=${runtime.machine.services.caddy.configFile}
+        export REPLACEMENT_CADDY_CONFIG=${replacementRuntime.machine.services.caddy.configFile}
+        export ORIGINAL_ARTIFACT=${artifact}
+        export REPLACEMENT_ARTIFACT=${replacement}
         bash ${../tests/static-site-runtime.sh} 2>&1 | tee "$out/runtime.log"
       '';
 }

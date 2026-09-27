@@ -103,6 +103,14 @@ review and the exact-source checks above.
 
 Caddy runtime checks execute the generated consumer configuration and retain
 public config, adaptation/validation logs and runtime logs.
+`static-site-runtime` compares HTTP response bodies byte-for-byte with built
+fixtures and replaces the artifact on the same public claim and hostname,
+retaining its external forward-proxy contribution. It covers canonical serving,
+GET/HEAD alias redirects preserving path/query, custom and fallback HTTP 404,
+and authenticated proxy requests. These reusable hosting regressions belong
+here rather than in a consumer checkout. Independent capability selection is
+covered by the `consumer-*` checks; Caddy contribution composition is covered by
+`caddy-contribution-dependencies` and the static-site runtime fixture.
 ACME outputs retain public certificates, serial evidence and logs, never generated
 private keys. The postrun fixture invokes a recording systemctl adapter that
 reloads a real Caddy process; this proves the new certificate is served but does
