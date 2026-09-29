@@ -16,6 +16,15 @@ There is no hosted CI, automatic merge or automatic release.
 5. Prepare release notes describing behavior, breaking surfaces, validation and
    required consumer changes. Keep draft notes in the ignored `.work/release/`.
 
+## Version 4 migration
+
+Static WAN replaces `secondaryIPv4`, `routeTableName`, `routeTableId` and
+`rulePriority` with the `additionalIPv4s` list and the `routeTableBase`/
+`rulePriorityBase` settings. Move each former secondary address into the list
+as described in the [static WAN migration](../../clanServices/wan-static/README.md#migration-from-secondaryipv4).
+The default route now names the primary address as preferred source, and
+evaluation rejects a primary gateway outside the primary prefix.
+
 ## Version 2 migration
 
 Before adopting version 2, update consumers as follows:

@@ -21,13 +21,32 @@ _: _: {
             default = null;
           };
           primaryIPv4 = lib.mkOption { type = ipv4; };
-          secondaryIPv4 = lib.mkOption { type = ipv4; };
           prefixLength = lib.mkOption { type = lib.types.ints.between 0 32; };
           gateway = lib.mkOption { type = ipv4; };
-          routeTableName = lib.mkOption { type = lib.types.strMatching "[a-zA-Z][a-zA-Z0-9_]*"; };
-          routeTableId = lib.mkOption { type = lib.types.ints.between 1 4294967295; };
-          rulePriority = lib.mkOption {
+          additionalIPv4s = lib.mkOption {
+            type = lib.types.listOf (
+              lib.types.submodule {
+                options = {
+                  address = lib.mkOption { type = ipv4; };
+                  prefixLength = lib.mkOption {
+                    type = lib.types.nullOr (lib.types.ints.between 0 32);
+                    default = null;
+                  };
+                  gateway = lib.mkOption {
+                    type = lib.types.nullOr ipv4;
+                    default = null;
+                  };
+                };
+              }
+            );
+            default = [ ];
+          };
+          routeTableBase = lib.mkOption {
             type = lib.types.ints.between 1 4294967295;
+            default = 1000;
+          };
+          rulePriorityBase = lib.mkOption {
+            type = lib.types.ints.between 1 32765;
             default = 10010;
           };
           waitOnline = {

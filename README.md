@@ -15,7 +15,8 @@ share one dependency lock and one atomic SemVer release.
 
 WAN ownership is physical as well as logical: interface names and normalized MAC
 addresses must be unique across WAN selections, and a host may select at most one
-static WAN instance. That instance can configure two IPv4 addresses on its NIC.
+static WAN instance. That instance carries a primary IPv4 address and any number of
+additional IPv4 addresses, possibly from other prefixes, on its NIC.
 
 The [wildcard certificate compatibility adapter](clanServices/wildcard-certificate/README.md)
 is an additional claim adapter, not another runtime capability.

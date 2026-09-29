@@ -82,7 +82,9 @@ for settings and migration.
 
 Core supplies actual interface/MAC/address/gateway/table data. DHCP and static
 WAN selections cannot own the same interface or normalized physical MAC. At most one static WAN instance is
-supported per host, retaining its two IPv4 addresses. Externally managed WAN is allowed. Avoid retaining an old native
+supported per host; it carries every static IPv4 address of that NIC, and addresses
+outside the primary prefix receive source policy routing through their own gateway.
+Externally managed WAN is allowed. Avoid retaining an old native
 interface owner alongside its Network replacement: Network claim validation
 cannot discover every arbitrary external networking implementation.
 

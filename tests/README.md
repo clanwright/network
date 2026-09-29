@@ -40,7 +40,11 @@ boot VMs or contact a real DNS/ACME provider.
   connections; existing conntrack sessions follow the native stateful policy.
 - WAN runs native systemd-networkd with generated configuration. DHCP obtains
   a lease from local dnsmasq and reacquires it after a lease/address reset.
-  Static WAN checks both addresses, policy routing and source selection.
+  Static WAN places the provider behind a separate namespace with one gateway
+  per prefix and strict reverse-path filtering. It checks four addresses from
+  two prefixes, TCP and UDP replies from bound and wildcard IP_PKTINFO
+  listeners, per-prefix gateway selection, primary default egress, and a
+  negative control in which second-prefix replies fail without the source rule.
   Both exercise carrier down/up. Read-only empty `/sys` uses networkd's
   container behavior; physical NIC renaming and production boot are not tested.
 - The combined Certificates/Caddy contract evaluates provider-credential owner
