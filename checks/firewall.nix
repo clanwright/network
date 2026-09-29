@@ -7,10 +7,27 @@
 }:
 let
   inherit (pkgs) lib;
+  destination = {
+    destinationIPv4 = "192.0.2.2";
+    allowedTCPPorts = [ 8443 ];
+    allowedUDPPorts = [ 8443 ];
+  };
+  # The destination must be a host address evaluated through networking.interfaces.
+  hostAddresses.networking.interfaces.server0.ipv4.addresses = [
+    {
+      address = "192.0.2.2";
+      prefixLength = 24;
+    }
+    {
+      address = "192.0.2.4";
+      prefixLength = 24;
+    }
+  ];
   fixture = instance "network-firewall" "host" {
     public = {
       allowedTCPPorts = [ 443 ];
       allowedUDPPorts = [ 443 ];
+      destinations = [ destination ];
     };
     interfaces.fixture0.allowedTCPPorts = [ 22 ];
     bootstrapSsh = {
@@ -20,12 +37,61 @@ let
     };
     rejectHttp = true;
   };
-  consumer = consume { instances.firewall = fixture; };
+  consumer = consume {
+    instances.firewall = fixture;
+    extraModule = hostAddresses;
+  };
   firewallConfig = consumer.machine;
   stricterConsumer = consume {
     instances.firewall = fixture;
-    extraModule.services.openssh.settings.AuthenticationMethods = "publickey,publickey";
+    extraModule = {
+      imports = [ hostAddresses ];
+      services.openssh.settings.AuthenticationMethods = "publickey,publickey";
+    };
   };
+  destinationConsumer =
+    destinations:
+    consume {
+      instances.firewall = instance "network-firewall" "host" {
+        public.allowedTCPPorts = [ 443 ];
+        public.destinations = destinations;
+      };
+      extraModule = hostAddresses;
+    };
+  destinationRejectedWith =
+    fragment: destinations:
+    let
+      failed = builtins.filter (a: !a.assertion) (destinationConsumer destinations).machine.assertions;
+      result = builtins.tryEval (builtins.any (a: lib.hasInfix fragment a.message) failed);
+    in
+    result.success && result.value;
+  # Force only the typed rendering, so assertions cannot mask a missing type check.
+  destinationTypeRejected =
+    destinations:
+    !(builtins.tryEval (
+      builtins.deepSeq (destinationConsumer destinations).machine.networking.firewall.extraInputRules true
+    )).success;
+  rejectPacketsRejected =
+    let
+      rejecting = consume {
+        instances.firewall = instance "network-firewall" "host" { public.destinations = [ destination ]; };
+        extraModule = {
+          imports = [ hostAddresses ];
+          networking.firewall.rejectPackets = true;
+        };
+      };
+    in
+    builtins.any (
+      a: !a.assertion && lib.hasInfix "disable networking.firewall.rejectPackets" a.message
+    ) rejecting.machine.assertions;
+  scopedMultiple = {
+    destinationIPv4 = "192.0.2.4";
+    allowedTCPPorts = [
+      8443
+      47291
+    ];
+  };
+  nativeInputRules = firewallConfig.networking.firewall.extraInputRules;
   missingAddress = consume {
     instances.firewall = instance "network-firewall" "host" { bootstrapSsh.enable = true; };
   };
@@ -200,6 +266,7 @@ let
           pkgs.iproute2
           pkgs.netcat-openbsd
           pkgs.nftables
+          pkgs.python3
           pkgs.util-linux
         ];
         APPLY_RULES = applyRules;
@@ -261,6 +328,42 @@ in
   );
   firewall-invalid-bootstrap = gate "network-firewall-invalid-bootstrap" (
     !missingAddress.valid && !malformedAddress.success && !nonCanonicalAddress.success
+  );
+  firewall-public-destination-contracts = gate "network-firewall-public-destination-contracts" (
+    lib.hasInfix ''ip daddr 192.0.2.2 tcp dport { 8443 } accept comment "network: public destination ingress"'' nativeInputRules
+    && lib.hasInfix ''ip daddr 192.0.2.2 udp dport { 8443 } accept comment "network: public destination ingress"'' nativeInputRules
+    && lib.hasInfix "network: active bootstrap SSH" nativeInputRules
+    && firewallConfig.networking.firewall.allowedTCPPorts == [ 443 ]
+    && (destinationConsumer [ ]).valid
+    && (destinationConsumer [ ]).machine.networking.firewall.extraInputRules == ""
+    && (destinationConsumer [ scopedMultiple ]).valid
+    &&
+      lib.hasInfix "ip daddr 192.0.2.4 tcp dport { 8443, 47291 } accept"
+        (destinationConsumer [ scopedMultiple ]).machine.networking.firewall.extraInputRules
+    && !(lib.hasInfix "udp dport"
+      (destinationConsumer [ scopedMultiple ]).machine.networking.firewall.extraInputRules
+    )
+    && !destinationRejectedWith "network firewall public destination" [ destination ]
+    && destinationRejectedWith "public destinations must be distinct" [
+      destination
+      destination
+    ]
+    && destinationRejectedWith "public destination 192.0.2.2 declares no ports" [
+      {
+        destinationIPv4 = "192.0.2.2";
+      }
+    ]
+    && destinationRejectedWith "public destination 192.0.2.2 TCP port 443 is also accepted host-wide" [
+      (destination // { allowedTCPPorts = [ 443 ]; })
+    ]
+    && rejectPacketsRejected
+    && destinationRejectedWith "public destination 198.51.100.9 is not configured" [
+      (destination // { destinationIPv4 = "198.51.100.9"; })
+    ]
+    && !destinationTypeRejected [ destination ]
+    && destinationTypeRejected [ (destination // { destinationIPv4 = "999.0.2.2"; }) ]
+    && destinationTypeRejected [ (destination // { destinationIPv4 = "2001:db8::2"; }) ]
+    && destinationTypeRejected [ (destination // { allowedTCPPorts = [ 65536 ]; }) ]
   );
   firewall-private-ingress-contracts = gate "network-firewall-private-ingress-contracts" (
     (privateConsumer composedClaims).valid

@@ -91,6 +91,7 @@ check_name=certificates-caddy-integration
 | `consumer-static-site`, `static-site-contracts` | Static-site role selection, artifact context, multiple claims, certificate/listener requirements and incompatible attachments |
 | `static-site-runtime`, `static-site-invalid-artifacts` | Generated static hosting, alias/404/proxy behavior and build-time artifact rejection |
 | `firewall-invalid-bootstrap`, `firewall-runtime` | Bootstrap settings and native nftables packet/lifecycle checks |
+| `firewall-public-destination-contracts` | Destination-scoped public ports: rendered accepts, host-wide ports unchanged, duplicate, unconfigured and malformed destinations |
 | `firewall-private-ingress-contracts`, `firewall-private-ingress-runtime` | Typed private IPv4 claim composition, invalid/conflicting claims, and isolated ingress packet/lifecycle checks |
 | `wan-selection-contracts`, `wan-dhcp-runtime`, `wan-static-runtime` | Interface/MAC ownership, one static WAN, readiness policy composition, actual networkd addressing and carrier recovery |
 

@@ -39,6 +39,7 @@ nft list table inet network-edge-policy > "$out/network-edge-policy.nft"
 grep -q 'tcp dport 443 accept' "$out/native-firewall.nft"
 grep -q 'network: reject non-loopback HTTP' "$out/network-edge-policy.nft"
 grep -q 'network: active bootstrap SSH' "$out/native-firewall.nft"
+grep -q 'ip daddr 192.0.2.2 tcp dport 8443 accept comment "network: public destination ingress"' "$out/native-firewall.nft"
 
 unshare -n -- sleep infinity &
 client_pid=$!
@@ -51,6 +52,7 @@ nsenter -t "$client_pid" -n ip link show lo >/dev/null
 ip link add server0 type veth peer name client0
 ip link set client0 netns "$client_pid"
 ip address add 192.0.2.2/24 dev server0
+ip address add 192.0.2.4/24 dev server0
 ip -6 address add 2001:db8:1::2/64 dev server0 nodad
 ip link set server0 up
 nsenter -t "$client_pid" -n ip address add 192.0.2.3/24 dev client0
@@ -76,7 +78,34 @@ for address in 2001:db8:1::2 2001:db8:2::2; do
     nc -6 -l -k -s "$address" -p "$port" >/dev/null 2>&1 & listeners="$listeners $!"
   done
 done
+nc -4 -l -k -s 192.0.2.2 -p 8443 >/dev/null 2>&1 & listeners="$listeners $!"
 sleep 0.2
+
+# Classify a TCP connect: open, closed (RST from an accepted port without a
+# listener) or filtered (silent drop, connect timeout).
+tcp_state() {
+  nsenter -t "$client_pid" -n python3 - "$1" "$2" <<'PY'
+import socket
+import sys
+sock = socket.socket()
+sock.settimeout(1)
+try:
+    sock.connect((sys.argv[1], int(sys.argv[2])))
+    print("open")
+except socket.timeout:
+    print("filtered")
+except ConnectionRefusedError:
+    print("closed")
+PY
+}
+expect_state() {
+  state="$(tcp_state "$1" "$2")"
+  printf '%s:%s %s\n' "$1" "$2" "$state" | tee -a "$out/destination-ingress.log"
+  if [ "$state" != "$3" ]; then
+    echo "expected $3 for $1:$2, got $state" >&2
+    exit 1
+  fi
+}
 
 probe4() { nsenter -t "$client_pid" -n nc -4 -z -w 1 "$1" "$2"; }
 probe6() { nsenter -t "$client_pid" -n nc -6 -z -w 1 "$1" "$2"; }
@@ -96,6 +125,13 @@ expect_failure probe4 192.0.2.2 80
 expect_failure probe6 2001:db8:1::2 80
 expect_failure probe4 192.0.2.2 22
 expect_failure probe6 2001:db8:1::2 22
+
+# Destination-scoped ingress: TCP 8443 is accepted only for 192.0.2.2 and
+# silently dropped on the host's other address. The host-wide 443 control
+# shows the classifier distinguishes a reset from a drop.
+expect_state 192.0.2.2 8443 open
+expect_state 192.0.2.4 8443 filtered
+expect_state 192.0.2.4 443 closed
 
 printf '%s\n' "$(( $(date +%s) + 5 ))" > "$MARKER_PATH"
 chmod 0600 "$MARKER_PATH"

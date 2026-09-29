@@ -55,6 +55,7 @@
             "consumer-wildcard"
             "firewall-invalid-bootstrap"
             "firewall-private-ingress-contracts"
+            "firewall-public-destination-contracts"
             "incompatible-certificate-reload"
             "static-site-contracts"
             "wan-selection-contracts"

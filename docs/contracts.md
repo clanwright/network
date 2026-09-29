@@ -96,8 +96,10 @@ IPv6 is explicit host profile policy. WAN settings may carry that policy, while
 an unset setting preserves existing policy. TCP tuning belongs to the consumer
 VPN domain and is no longer a Network capability.
 Firewall ports compose through native NixOS contributions on the nftables
-backend. Legacy iptables policy is not supported by this candidate. Core owns exposure
-policy, including selection and lifecycle of the optional bootstrap SSH marker;
+backend. Legacy iptables policy is not supported by this candidate.
+Destination-scoped public ports accept traffic for one evaluated host IPv4
+address and leave the native silent drop on the host's other addresses.
+Core owns exposure policy, including selection and lifecycle of the optional bootstrap SSH marker;
 Network neither creates that marker nor implicitly grants public SSH access.
 Applications may contribute typed `networkCore.firewall.privateIngressClaims`
 keyed by caller identity while core selects the Firewall role. Each claim binds

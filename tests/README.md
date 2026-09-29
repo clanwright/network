@@ -34,6 +34,8 @@ boot VMs or contact a real DNS/ACME provider.
   contributions exercise the Network boundary, not a deployed VPN client.
 - Firewall loads the full evaluated native nftables tables and sends real
   packets through isolated interfaces. It covers public/tailnet ports,
+  a destination-scoped port that is open on its address and silently dropped
+  (timeout, not reset) on another host address,
   IPv4/IPv6 HTTP rejection, key-only bootstrap configuration, absolute-deadline
   expiry without reload, explicit renewal, revocation, reload, unsafe markers,
   unrelated tables and a later independent ban chain. Expiry blocks new

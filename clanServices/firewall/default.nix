@@ -11,7 +11,7 @@ _: _: {
       { lib, ... }:
       let
         inherit (import ../../lib/types.nix { inherit lib; }) ipv4;
-        portSettings = lib.types.submodule {
+        portOptions = {
           options.allowedTCPPorts = lib.mkOption {
             type = lib.types.listOf lib.types.port;
             default = [ ];
@@ -21,12 +21,26 @@ _: _: {
             default = [ ];
           };
         };
+        portSettings = lib.types.submodule portOptions;
+        destinationSettings = lib.types.submodule [
+          portOptions
+          { options.destinationIPv4 = lib.mkOption { type = ipv4; }; }
+        ];
       in
       {
         options = {
           public = lib.mkOption {
             default = { };
-            type = portSettings;
+            type = lib.types.submodule [
+              portOptions
+              {
+                options.destinations = lib.mkOption {
+                  type = lib.types.listOf destinationSettings;
+                  default = [ ];
+                  description = "Public ports accepted only for one host IPv4 destination.";
+                };
+              }
+            ];
           };
           interfaces = lib.mkOption {
             default = { };

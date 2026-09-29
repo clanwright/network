@@ -8,6 +8,32 @@ Settings `public.allowedTCPPorts`, `public.allowedUDPPorts`, and
 `interfaces.<name>.allowedTCPPorts/allowedUDPPorts` are additive native firewall
 contributions (all default empty). Other services may contribute ports.
 
+`public.destinations` (default empty) accepts ports for one host IPv4 address
+only. Each entry requires a canonical `destinationIPv4` and accepts
+`allowedTCPPorts` and `allowedUDPPorts`; it renders
+`ip daddr <address> tcp|udp dport { … } accept` in the native `input-allow`
+chain through `networking.firewall.extraInputRules`. The host's other addresses
+keep the native silent drop for those ports, so they neither answer nor reset.
+Evaluation therefore rejects a destination port that is also accepted host-wide
+(ports or port ranges from any contributor), a destination without ports, and
+`networking.firewall.rejectPackets` while destinations are declared.
+For example:
+
+```nix
+public.destinations = [
+  {
+    destinationIPv4 = "192.0.2.23";
+    allowedTCPPorts = [ 443 47291 ];
+  }
+];
+```
+
+Destinations must be distinct and must be host addresses evaluated through
+`networking.interfaces.<name>.ipv4.addresses`, which the static WAN role
+populates. Addresses assigned outside that option, such as DHCP leases or
+hand-written networkd units, fail evaluation. The private-ingress guard still
+applies first to its protected destinations.
+
 Applications may contribute `networkCore.firewall.privateIngressClaims.<caller>`
 on a host selecting this role. Each claim requires a canonical `destinationIPv4`
 and accepts `trustedInterfaces`, a list of Linux interface names. Loopback (`lo`)
