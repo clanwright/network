@@ -34,6 +34,7 @@ let
       enable = true;
       publicIPv4 = "192.0.2.2";
       markerPath = "/build/network-bootstrap/allow-wan-ssh";
+      durationSeconds = 120;
     };
     rejectHttp = true;
   };
@@ -65,6 +66,56 @@ let
       result = builtins.tryEval (builtins.any (a: lib.hasInfix fragment a.message) failed);
     in
     result.success && result.value;
+  nativeOverlapRejected =
+    protocol: native:
+    let
+      candidate = consume {
+        instances.firewall = instance "network-firewall" "host" {
+          public.destinations = [
+            {
+              destinationIPv4 = "192.0.2.2";
+              "allowed${protocol}Ports" = [ 8443 ];
+            }
+          ];
+        };
+        extraModule = {
+          imports = [ hostAddresses ];
+          networking.firewall = native;
+        };
+      };
+    in
+    builtins.any (
+      a: !a.assertion && lib.hasInfix "also accepted" a.message
+    ) candidate.machine.assertions;
+  nativeOverlapCases = protocol: [
+    { "allowed${protocol}Ports" = [ 8443 ]; }
+    {
+      "allowed${protocol}PortRanges" = [
+        {
+          from = 8440;
+          to = 8450;
+        }
+      ];
+    }
+    { interfaces.default."allowed${protocol}Ports" = [ 8443 ]; }
+    {
+      interfaces.default."allowed${protocol}PortRanges" = [
+        {
+          from = 8440;
+          to = 8450;
+        }
+      ];
+    }
+    { interfaces.ordinary0."allowed${protocol}Ports" = [ 8443 ]; }
+    {
+      interfaces.ordinary0."allowed${protocol}PortRanges" = [
+        {
+          from = 8440;
+          to = 8450;
+        }
+      ];
+    }
+  ];
   # Force only the typed rendering, so assertions cannot mask a missing type check.
   destinationTypeRejected =
     destinations:
@@ -119,7 +170,7 @@ let
     claims:
     consume {
       instances.firewall = privateFixture;
-      extraModule.networkCore.firewall.privateIngressClaims = claims;
+      extraModule.networking.firewall.privateIngress = claims;
     };
   oneClaim = {
     app = privateClaim "192.0.2.2" [ "fixture0" ];
@@ -142,116 +193,94 @@ let
   privateConflict = privateConsumer (
     oneClaim // { second = privateClaim "192.0.2.2" [ "tailscale0" ]; }
   );
-  privateApply = pkgs.writeText "network-private-ingress-apply.nft" (
-    lib.concatStrings (
-      lib.mapAttrsToList tableDeletion (
-        lib.filterAttrs (_: table: table.enable) privateConfig.networking.nftables.tables
-      )
-    )
-    + lib.concatStrings (
-      lib.mapAttrsToList tableDefinition (
-        lib.filterAttrs (_: table: table.enable) privateConfig.networking.nftables.tables
-      )
-    )
-  );
   privateRemovedConfig = (privateConsumer { inherit (composedClaims) other; }).machine;
-  privateOneRemovedConfig =
-    (privateConsumer {
-      inherit (composedClaims) second other;
-    }).machine;
-  privateOneRemovedApply = pkgs.writeText "network-private-ingress-one-removed.nft" (
-    lib.concatStrings (
-      lib.mapAttrsToList tableDeletion (
-        lib.filterAttrs (_: table: table.enable) privateOneRemovedConfig.networking.nftables.tables
-      )
-    )
-    + lib.concatStrings (
-      lib.mapAttrsToList tableDefinition (
-        lib.filterAttrs (_: table: table.enable) privateOneRemovedConfig.networking.nftables.tables
-      )
-    )
-  );
-  privateRemovedApply = pkgs.writeText "network-private-ingress-removed.nft" (
-    lib.concatStrings (
-      lib.mapAttrsToList tableDeletion (
-        lib.filterAttrs (_: table: table.enable) privateRemovedConfig.networking.nftables.tables
-      )
-    )
-    + lib.concatStrings (
-      lib.mapAttrsToList tableDefinition (
-        lib.filterAttrs (_: table: table.enable) privateRemovedConfig.networking.nftables.tables
-      )
-    )
-  );
+  privateOneRemovedConfig = (privateConsumer { inherit (composedClaims) second other; }).machine;
+  privateUpdatedConfig = (privateConsumer { app = privateClaim "192.0.2.2" [ "public0" ]; }).machine;
   privateLastConfig = (privateConsumer { }).machine;
-  privateLastApply = pkgs.writeText "network-private-ingress-last.nft" (
-    lib.concatStrings (
-      lib.mapAttrsToList tableDeletion (
-        lib.filterAttrs (_: table: table.enable) privateLastConfig.networking.nftables.tables
-      )
-    )
-    + lib.concatStrings (
-      lib.mapAttrsToList tableDefinition (
-        lib.filterAttrs (_: table: table.enable) privateLastConfig.networking.nftables.tables
-      )
-    )
-  );
   defaultPrivateConsumer =
     claims:
     consume {
-      instances.firewall = instance "network-firewall" "host" { public.allowedTCPPorts = [ 443 ]; };
-      extraModule.networkCore.firewall.privateIngressClaims = claims;
+      instances.firewall = instance "network-firewall" "host" {
+        public.allowedTCPPorts = [ 443 ];
+        public.allowedUDPPorts = [ 443 ];
+      };
+      extraModule.networking.firewall.privateIngress = claims;
     };
   defaultClaimConfig = (defaultPrivateConsumer oneClaim).machine;
   defaultEmptyConfig = (defaultPrivateConsumer { }).machine;
-  defaultClaimApply = pkgs.writeText "network-private-ingress-default-claim.nft" (
-    lib.concatStrings (
-      lib.mapAttrsToList tableDeletion (
-        lib.filterAttrs (_: table: table.enable) defaultClaimConfig.networking.nftables.tables
-      )
-    )
-    + lib.concatStrings (
-      lib.mapAttrsToList tableDefinition (
-        lib.filterAttrs (_: table: table.enable) defaultClaimConfig.networking.nftables.tables
-      )
-    )
+  httpPositiveConfig =
+    (consume {
+      instances.firewall = instance "network-firewall" "host" {
+        public.allowedTCPPorts = [
+          80
+          443
+        ];
+      };
+      extraModule = hostAddresses;
+    }).machine;
+  udpPositiveConfig =
+    (consume {
+      instances.firewall = instance "network-firewall" "host" {
+        public.allowedUDPPorts = [ 8443 ];
+      };
+      extraModule = hostAddresses;
+    }).machine;
+  httpGuardConfig =
+    (consume {
+      instances.firewall = instance "network-firewall" "host" {
+        public.allowedTCPPorts = [
+          80
+          443
+        ];
+        rejectHttp = true;
+      };
+      extraModule = hostAddresses;
+    }).machine;
+  duplicateOwner = builtins.tryEval (
+    builtins.deepSeq
+      (consume {
+        instances = {
+          first = instance "network-firewall" "host" { };
+          second = instance "network-firewall" "host" { };
+        };
+      }).machine.networking.firewall.networkBaseOwner
+      true
   );
-  defaultEmptyApply = pkgs.writeText "network-private-ingress-default-empty.nft" (
-    # The pinned native nftables reload deletes tables declared by the previous
-    # generation before applying the new generation, even when no longer declared.
-    ''
-      table inet network-edge-policy
-      delete table inet network-edge-policy
-    ''
-    + lib.concatStrings (
-      lib.mapAttrsToList tableDeletion (
-        lib.filterAttrs (_: table: table.enable) defaultEmptyConfig.networking.nftables.tables
-      )
-    )
-    + lib.concatStrings (
-      lib.mapAttrsToList tableDefinition (
-        lib.filterAttrs (_: table: table.enable) defaultEmptyConfig.networking.nftables.tables
-      )
-    )
-  );
-  enabledTables = lib.filterAttrs (_: table: table.enable) firewallConfig.networking.nftables.tables;
-  tableDeletion = _: table: ''
-    table ${table.family} ${table.name}
-    delete table ${table.family} ${table.name}
-  '';
-  tableDefinition = _: table: ''
-    table ${table.family} ${table.name} {
-      ${table.content}
-    }
-  '';
-  applyRules = pkgs.writeText "network-firewall-apply.nft" (
-    lib.concatStrings (lib.mapAttrsToList tableDeletion enabledTables)
-    + lib.concatStrings (lib.mapAttrsToList tableDefinition enabledTables)
-  );
-  stopRules = pkgs.writeText "network-firewall-stop.nft" (
-    lib.concatStrings (lib.mapAttrsToList tableDeletion enabledTables)
-  );
-  refresh = firewallConfig.systemd.services.network-bootstrap-ssh-refresh.serviceConfig.ExecStart;
+  # Execute evaluated systemd command chains unchanged, including native state
+  # bookkeeping and Network bootstrap hooks. The runtime supplies StateDirectory.
+  commandChain =
+    name: commands:
+    pkgs.writeShellScript name (
+      "set -euo pipefail\n" + lib.concatMapStringsSep "\n" toString (lib.toList commands)
+    );
+  lifecycle =
+    name: config:
+    let
+      service = config.systemd.services.nftables.serviceConfig;
+    in
+    {
+      start = commandChain (name + "-start") (
+        lib.toList service.ExecStart ++ lib.toList (service.ExecStartPost or [ ])
+      );
+      reload = commandChain (name + "-reload") service.ExecReload;
+      stop = commandChain (name + "-stop") service.ExecStop;
+    };
+  native = lifecycle "network-firewall" firewallConfig;
+  httpPositive = lifecycle "network-http-positive" httpPositiveConfig;
+  udpPositive = lifecycle "network-udp-positive" udpPositiveConfig;
+  httpGuard = lifecycle "network-http-guard" httpGuardConfig;
+  privateNative = lifecycle "network-private" privateConfig;
+  privateOneRemoved = lifecycle "network-private-one-removed" privateOneRemovedConfig;
+  privateRemoved = lifecycle "network-private-removed" privateRemovedConfig;
+  privateUpdated = lifecycle "network-private-updated" privateUpdatedConfig;
+  privateLast = lifecycle "network-private-last" privateLastConfig;
+  defaultClaim = lifecycle "network-default-claim" defaultClaimConfig;
+  defaultEmpty = lifecycle "network-default-empty" defaultEmptyConfig;
+  refreshPackage =
+    lib.findFirst (package: lib.getName package == "network-bootstrap-ssh-refresh")
+      (throw "network firewall check could not find the bootstrap refresh package")
+      firewallConfig.environment.systemPackages;
+  refresh = lib.getExe refreshPackage;
   renewPackage =
     lib.findFirst (package: lib.getName package == "network-bootstrap-ssh-renew")
       (throw "network firewall check could not find the bootstrap renewal package")
@@ -264,13 +293,21 @@ let
           pkgs.coreutils
           pkgs.gnugrep
           pkgs.iproute2
-          pkgs.netcat-openbsd
+          pkgs.socat
+          pkgs.nmap
+          pkgs.jq
           pkgs.nftables
-          pkgs.python3
           pkgs.util-linux
         ];
-        APPLY_RULES = applyRules;
-        STOP_RULES = stopRules;
+        NATIVE_START = native.start;
+        NATIVE_RELOAD = native.reload;
+        NATIVE_STOP = native.stop;
+        HTTP_POSITIVE_RELOAD = httpPositive.reload;
+        UDP_POSITIVE_RELOAD = udpPositive.reload;
+        HTTP_GUARD_RELOAD = httpGuard.reload;
+        RUNTIME_SCRIPT = pkgs.writeText "network-firewall-runtime.sh" (
+          builtins.readFile ../tests/firewall-runtime.sh
+        );
         REFRESH = refresh;
         RENEW = lib.getExe renewPackage;
         MARKER_PATH = "/build/network-bootstrap/allow-wan-ssh";
@@ -290,17 +327,25 @@ let
           pkgs.gnugrep
           pkgs.iproute2
           pkgs.iputils
-          pkgs.netcat-openbsd
+          pkgs.socat
+          pkgs.nmap
+          pkgs.jq
           pkgs.nftables
-          pkgs.python3
           pkgs.util-linux
         ];
-        APPLY_RULES = privateApply;
-        ONE_REMOVED_RULES = privateOneRemovedApply;
-        REMOVED_RULES = privateRemovedApply;
-        LAST_RULES = privateLastApply;
-        DEFAULT_CLAIM_RULES = defaultClaimApply;
-        DEFAULT_EMPTY_RULES = defaultEmptyApply;
+        NATIVE_START = privateNative.start;
+        NATIVE_RELOAD = privateNative.reload;
+        NATIVE_STOP = privateNative.stop;
+        ONE_REMOVED_RELOAD = privateOneRemoved.reload;
+        REMOVED_RELOAD = privateRemoved.reload;
+        UPDATED_RELOAD = privateUpdated.reload;
+        LAST_START = privateLast.start;
+        LAST_RELOAD = privateLast.reload;
+        DEFAULT_CLAIM_RELOAD = defaultClaim.reload;
+        DEFAULT_EMPTY_RELOAD = defaultEmpty.reload;
+        RUNTIME_SCRIPT = pkgs.writeText "network-firewall-private-ingress-runtime.sh" (
+          builtins.readFile ../tests/firewall-private-ingress-runtime.sh
+        );
       }
       ''
         mkdir -p "$out"
@@ -317,6 +362,8 @@ in
     && firewallConfig.networking.firewall.backend == "nftables"
     && firewallConfig.networking.firewall.allowedTCPPorts == [ 443 ]
     && firewallConfig.networking.firewall.interfaces.fixture0.allowedTCPPorts == [ 22 ]
+    && firewallConfig.networking.nftables.checkRuleset
+    && !duplicateOwner.success
     && !firewallConfig.networking.firewall.allowPing
     && !firewallConfig.services.openssh.openFirewall
     && !firewallConfig.services.openssh.settings.PasswordAuthentication
@@ -353,8 +400,12 @@ in
         destinationIPv4 = "192.0.2.2";
       }
     ]
-    && destinationRejectedWith "public destination 192.0.2.2 TCP port 443 is also accepted host-wide" [
+    && destinationRejectedWith "public destination 192.0.2.2 TCP port 443 is also accepted" [
       (destination // { allowedTCPPorts = [ 443 ]; })
+    ]
+    && lib.all (protocol: lib.all (nativeOverlapRejected protocol) (nativeOverlapCases protocol)) [
+      "TCP"
+      "UDP"
     ]
     && rejectPacketsRejected
     && destinationRejectedWith "public destination 198.51.100.9 is not configured" [
@@ -376,6 +427,8 @@ in
     && (privateConsumer { }).valid
     && !privateConflict.valid
     && !(privateInvalid { bad = privateClaim "2001:db8::2" [ "fixture0" ]; }).success
+    && !(privateInvalid { bad = privateClaim "999.0.2.2" [ "fixture0" ]; }).success
+    && !(privateInvalid { bad = privateClaim "192.000.2.2" [ "fixture0" ]; }).success
     && !(privateInvalid { bad = privateClaim "192.0.2.2" [ "*" ]; }).success
     && !(privateInvalid { bad = privateClaim "192.0.2.2" [ "abcdefghijklmnop" ]; }).success
     &&

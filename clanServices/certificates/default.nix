@@ -1,4 +1,4 @@
-{ self }: _: {
+_: _: {
   _class = "clan.service";
   manifest = {
     name = "@clanwright/network-certificates";
@@ -26,7 +26,7 @@
       };
     };
     perInstance = { settings, ... }: {
-      nixosModule = import ../../modules/certificates { inherit settings self; };
+      nixosModule = import ./module.nix { inherit settings; };
     };
   };
 }

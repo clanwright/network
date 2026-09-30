@@ -73,12 +73,7 @@ _: _: {
         };
       };
     perInstance = { settings, ... }: {
-      nixosModule = _: {
-        imports = [
-          ../../modules/host/platform.nix
-          (import ../../modules/host/firewall.nix { inherit settings; })
-        ];
-      };
+      nixosModule = import ./module.nix { inherit settings; };
     };
   };
 }

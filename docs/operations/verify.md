@@ -1,32 +1,30 @@
 # Local verification
 
-Run from the Network repository on the configured development host. Runtime
-checks use the existing x86_64-linux builder. Do not create or use virtual
-machines for development or verification, including NixOS VM tests and QEMU/KVM.
-Use process/namespace checks, do not change builders to make a gate pass, and
-treat namespace availability as a prerequisite whose absence fails the runtime
-gate.
+Local acceptance comprises source review, pure native composition, package builds
+and the available ordinary process/tool checks on the existing x86_64-linux Nix
+builder. Do not create a VM, root/systemd runner, test host or privilege,
+credential or isolation workaround. Namespace prerequisites of the existing
+process fixtures must be available; their absence is a failed local fixture,
+not evidence of service-manager behavior. Actual manager/same-host behavior is
+PREDEPLOY acceptance in the matrix below.
 
-## Fast development gate on Apple Silicon macOS
+## Fast development gate
+
+On the configured Apple Silicon development host:
 
 ```sh
 nix run --no-write-lock-file --option builders "" .#verify-fast
 ```
 
-This developer app runs pinned nixfmt, Statix, Deadnix, shell syntax, whitespace checks and
-all evaluation-only contracts against the unchanged x86_64-linux target. It
-includes nonignored untracked files in whitespace and shell syntax checks. It
-exports no Darwin runtime packages or NixOS support. The contract predicates
-are shared with the existing Linux flake checks through `lib.checkContracts`.
-
-The initial app invocation may download the locked sources and native developer
-tools. Contract evaluation itself is offline, disables import-from-derivation
-and disables remote builders: a missing prerequisite fails instead of silently
-starting a Linux build. Each run retains stage logs and milliseconds/exit codes
-in a unique `.work/verification/fast-<run>/` directory. This gate does not prove
-Linux binaries, packet handling, actual file permissions or certificate renewal.
-
-To inspect only the evaluated contracts:
+The app runs pinned nixfmt, Statix, Deadnix, Bash syntax, whitespace checks and
+all 14 evaluated contracts against the x86_64-linux configuration. Static checks
+include nonignored untracked files. Native Git-flake evaluation requires newly
+imported files to be visible to Git, for example with `git add --intent-to-add`.
+Contract evaluation is offline, disables
+import-from-derivation and remote builders, and fails on missing prerequisites.
+It retains stage logs, elapsed milliseconds and exit codes in a unique
+`.work/verification/fast-<run>/` directory. Developer tool downloads/builds on
+first invocation are distinct from contract time.
 
 ```sh
 nix eval --offline --json --no-write-lock-file \
@@ -34,128 +32,92 @@ nix eval --offline --json --no-write-lock-file \
   .#lib.checkContracts
 ```
 
-## Nested consumer locking
+`lib.checkContracts` and Linux check derivations share the same predicates and
+an explicit coverage manifest. This gate proves configuration, not packet
+handling, file permissions, deployed readers or live renewal.
 
-Run the independent lock-generation gate with the installed Nix and the official
-stable Nix binary being accepted for consumers:
+## Native lock generation
+
+Run with the installed Nix and the official stable Nix binary accepted by the
+consumer. Keep both results; this is mandatory source-graph acceptance.
 
 ```sh
-python3 checks/nested-consumer-lock.py
-python3 checks/nested-consumer-lock.py --nix /absolute/path/to/official/nix
+bash checks/nested-consumer-lock.sh
+bash checks/nested-consumer-lock.sh --nix /absolute/path/to/official/nix
 ```
 
-The gate snapshots the current Network candidate into an isolated Git repository,
-commits an intermediate wrapper's lock, and tests a consumer selecting Network
-both directly and through that wrapper. It uses ordinary fresh locking and an
-existing-lock update, checks exact dependency identities and convergence,
-evaluates Network's module contracts, and requires byte-identical repeated
-locking. No consumer overrides or reconstructed locks are used. Logs and elapsed
-times remain under `.work/verification/nested-lock-unique/`. `--source` can select
-another Network Git checkout, including a pre-fix checkout for reproduction.
+The native Git/Nix/rsync helper copies current staged, unstaged and nonignored
+untracked source into disposable Git repositories. It exercises fresh direct
+and intermediate-flake locking, a normal existing-lock update and byte-identical
+relocking. Native Nix graph comparison checks resolved follows, exact identities
+and dependency sharing; one real Clan role composition checks the catalog.
+It does not alter the working checkout's index, refs or lock, or migrate consumer
+inputs. `--source DIRECTORY` selects another source checkout. Logs and durations
+remain in `.work/verification/nested-lock-unique/`.
 
-This gate covers Network's source graph; it does not replace Apps' own recipe
-checks or coordinated released-tag adoption. In particular, updating an existing
-Apps v0.1.0 consumer to a coordinated Apps/Network release must also pass normally.
-The older relative-stub graph fails fresh nested locking on Nix 2.34.7+1 and
-2.35.2 even when standalone contracts pass. Preserve an accepted consumer lock
-until the new source set passes its adoption gates.
+## Linux builds and bounded process checks
 
-## Linux runtime and release acceptance
-
-The combined Certificates/Caddy evaluation checks that the provider credential
-is configured with owner `acme`, group `acme` and mode `0400`, that certificate
-files use group `acme`, and that Caddy belongs to that group. These predicates
-do not prove SOPS delivery or actual runtime access and denial on a deployed
-machine. Those permissions remain a separate machine acceptance boundary.
-
-The synthetic distinct-UID permission fixture is retired by owner-approved
-scope decision; there is no replacement mandatory local gate.
-
-Preserve readable output and elapsed time under ignored `.work/verification/`:
+Build all 24 outputs explicitly; on Darwin, a bare `nix flake check` can report
+zero runtime checks. Preserve logs and measured whole-command time:
 
 ```sh
 mkdir -p .work/verification
 set -o pipefail
-check_name=certificates-caddy-integration
-{ time nix build --no-link --print-out-paths ".#checks.x86_64-linux.${check_name}"; } 2>&1 | tee ".work/verification/${check_name}.log"
-```
-
-| Check outputs | Purpose |
-| --- | --- |
-| `consumer-certificates`, `consumer-caddy`, `consumer-firewall`, `consumer-wan-dhcp`, `consumer-wan-static` | Independent capability selection through the Clan catalog; evaluated assertions and units |
-| `consumer-wildcard`, `incompatible-certificate-reload`, `certificate-owner-consistency` | Wildcard adapter, reload target and ownership contracts |
-| `certificates-caddy-integration` | Combined native reload registration/deduplication, credential owner/group/mode `acme`/`acme`/`0400`, certificate group `acme`, and Caddy certificate-group membership |
-| `acme-local-renewal` | Native issuance, Lego 4 account migration and renewal against local Pebble; running Caddy serves the renewed certificate |
-| `caddy-contribution-dependencies`, `caddy-wildcard-listener-collisions`, `caddy-public-site-owner` | Fragment composition, listener collision and public-root ownership |
-| `caddy-module-inventory`, `caddy-config`, `caddy-ratelimit-runtime` | Exact plugin inventory, rendered config validation and rate-limited HTTP requests |
-| `consumer-static-site`, `static-site-contracts` | Static-site role selection, artifact context, multiple claims, certificate/listener requirements and incompatible attachments |
-| `static-site-runtime`, `static-site-invalid-artifacts` | Generated static hosting, alias/404/proxy behavior and build-time artifact rejection |
-| `firewall-invalid-bootstrap`, `firewall-runtime` | Bootstrap settings and native nftables packet/lifecycle checks |
-| `firewall-public-destination-contracts` | Destination-scoped public ports: rendered accepts, host-wide ports unchanged, duplicate, unconfigured and malformed destinations |
-| `firewall-private-ingress-contracts`, `firewall-private-ingress-runtime` | Typed private IPv4 claim composition, invalid/conflicting claims, and isolated ingress packet/lifecycle checks |
-| `wan-selection-contracts`, `wan-dhcp-runtime`, `wan-static-runtime` | Interface/MAC ownership, one static WAN, readiness policy composition, actual networkd addressing and carrier recovery |
-
-Build every Linux check explicitly for release acceptance:
-
-```sh
-set -o pipefail
 { time nix build --no-link --print-out-paths --print-build-logs --no-write-lock-file \
-  --impure --expr 'let f = builtins.getFlake (toString ./.); in builtins.attrValues f.checks.x86_64-linux'; } \
-  2>&1 | tee .work/verification/all-checks-build.log
+  --impure --expr 'let f = builtins.getFlake ("git+file://" + toString ./.); in builtins.attrValues f.checks.x86_64-linux'; } \
+  2>&1 | tee .work/verification/linux-checks.log
 ```
 
-Do not use a successful `nix flake check --system x86_64-linux` on Darwin
-as runtime acceptance: it can evaluate the Linux derivations while reporting
-`running 0 flake checks`. The explicit build above requests every Linux check
-regardless of the development host. Existing valid store outputs are reused;
-this does not mean each test was executed again.
+For one affected check, build `.#checks.x86_64-linux.<name>`. Store hits reuse
+existing evidence; they do not mean that the test body ran again. When only docs
+change, unchanged derivation identities may reuse accepted source-check evidence;
+record the accepted immutable source, output identities and readable logs. Rerun
+the fast gate on the final checkout and rebuild any changed derivation. Each runtime
+fixture has finite process/request deadlines and retains readable results.
 
-Run formatting, Statix and Deadnix from the pinned toolchain as release gates:
+| Outputs | Useful coverage |
+| --- | --- |
+| `consumer-caddy`, `consumer-certificates`, `consumer-static-site`, `consumer-firewall`, `consumer-wan-dhcp`, `consumer-wan-static` | Actual independent Clan role selection, assertions and native generated units |
+| `certificate-native-contracts`, `certificates-caddy-integration` | Stable IDs, wildcard SANs, scalar conflicts/list composition, null challenge defaults, implicit-reference failures, native notification and reader/credential configuration, stock host Lego/unit policy |
+| `caddy-native-contracts` | Native owner/extension semantics, canonical DNS/listeners/aliases, proxy exclusivity and rejected configuration/package bypasses |
+| `caddy-module-inventory`, `caddy-runtime` | Exact plugin inventory; one native config adaptation/validation, meaningful rate-limit requests, genuine returned-handler/error-handler failures and complete configured process sinks with positive leak controls |
+| `static-site-contracts`, `static-site-invalid-artifacts`, `static-site-runtime` | Artifact/context/settings validation; generated multi-address catch-all/aliases, exact bodies, publisher-before-fallback, CONNECT origin positive/negative controls, custom/fallback 404 and explicit reload/artifact replacement |
+| `timewebcloud-contract` | Stock Lego source/vendor/toolchain; local DNS/API mocks prove direct/CNAME record creation/cleanup and failures, with no provider/public DNS access |
+| `acme-local-renewal` | Current native issuance/renewal scripts with local Pebble, stock host Lego, exact notification arguments and real Caddy served-certificate replacement through a recording process adapter |
+| `firewall-invalid-bootstrap`, `firewall-public-destination-contracts`, `firewall-private-ingress-contracts` | Absolute-deadline settings, native base uniqueness, broader-accept port/range conflicts, explicit destinations and normalized private guards |
+| `firewall-runtime`, `firewall-private-ingress-runtime` | Generated native nftables scripts and actual packets: expiry/renew/revoke, remaining deadline across reload, IPv4/IPv6 HTTP/private ingress and unrelated table preservation |
+| `wan-selection-contracts`, `wan-dhcp-runtime`, `wan-static-runtime` | Interface/MAC/route ownership, stable IDs/native alias conflicts/readiness, available networkd process addressing/routing/carrier recovery and representative transport precedence |
 
-```sh
-check_tools="$(nix build --no-link --print-out-paths --impure --expr '
-  let f = builtins.getFlake (toString ./.);
-      p = f.inputs.nixpkgs.legacyPackages.${builtins.currentSystem};
-  in p.symlinkJoin { name = "network-check-tools"; paths = [ p.nixfmt p.statix p.deadnix ]; }')"
-git ls-files -z '*.nix' | xargs -0 "$check_tools/bin/nixfmt" --check
-"$check_tools/bin/statix" check . --ignore .work
-git ls-files -z '*.nix' | xargs -0 "$check_tools/bin/deadnix" --fail
-```
+The process fixtures qualify the generated configuration and bounded requests.
+For a concrete CONNECT consumer, also inspect adapted Host matchers and effective
+bind/443 listeners; test a target matching a named vhost with correct, missing and
+wrong credentials and origin controls. This available source/process seam must
+pass before publication. Its policy belongs in [contracts](../contracts.md).
 
-Use the locked nixpkgs tools, not an unrelated channel. For example, obtain
-`statix` and `deadnix` from this flake's locked input through `nix build --expr`
-or the configured development environment. No runtime architecture is added by
-the optional Darwin formatter. Release acceptance also requires independent
-review and the exact-source checks above.
+The local ACME fixture uses Pebble HTTP-01 and a recording/reloading process
+adapter, not a service manager or Timeweb DNS-01. Generated fixture keys are
+removed before retaining outputs. Actual credential/reader permissions require
+the PREDEPLOY acceptance below. Existing certificate/account state and the
+host-native ACME/Lego pair need consumer qualification; no Network account-migration adapter is supplied.
 
-Caddy runtime checks execute the generated consumer configuration and retain
-public config, adaptation/validation logs and runtime logs.
-`static-site-runtime` compares HTTP response bodies byte-for-byte with built
-fixtures and replaces the artifact on the same public claim and hostname,
-retaining its external forward-proxy contribution. It covers canonical serving,
-GET/HEAD alias redirects preserving path/query, custom and fallback HTTP 404,
-and authenticated proxy requests. These reusable hosting regressions belong
-here rather than in a consumer checkout. Independent capability selection is
-covered by the `consumer-*` checks; Caddy contribution composition is covered by
-`caddy-contribution-dependencies` and the static-site runtime fixture.
-ACME outputs retain public certificates, serial evidence and logs, never generated
-private keys. The postrun fixture invokes a recording systemctl adapter that
-reloads a real Caddy process; this proves the new certificate is served but does
-not boot a full consumer systemd installation. The DNS challenge transport is
-local Pebble HTTP-01, not production Timeweb DNS-01. Provider credentials, real
-propagation and live issuance require separate authorized acceptance. The Lego
-package separately runs an offline Timeweb v2 contract against local DNS and a
-mock HTTP API, covering CNAME targets, record creation, cleanup and failures.
+## PREDEPLOY acceptance
 
-Firewall checks use full evaluated native tables and actual packets in isolated
-namespaces. They test bootstrap expiration without firewall reload, renewal,
-revocation, reload, IPv4/IPv6 HTTP blocking, private IPv4 destination guards,
-claim removal and preservation of unrelated tables.
-WAN checks exercise native networkd leases, routing and carrier recovery; physical
-NIC/udev renaming and production boot order still require machine acceptance.
-Local checks never establish deployed host connectivity or stunnel readiness.
+This is the canonical remaining runtime matrix. Every row is **PREDEPLOY / NOT
+OBSERVED** by local acceptance. No existing root/systemd runner is available; the
+owner deferred these actual cases and forbids a replacement runner. These rows
+do not block source delivery, and local process PASS never changes their status.
 
-The shared consumer harness is a synthetic in-repository consumer with an isolated
-on-disk fixture directory. Actual independent-flake integration is additionally
-checked in the Clanwright candidate worktree; a local source override does not
-prove released-tag adoption. See [release and adoption](release.md).
+| Owner | Required actual evidence | Status |
+| --- | --- | --- |
+| Access and consuming unit owner | Finite readiness helper under actual Caddy UID/sandbox; private address/interface checks through `AF_NETLINK`, Tailscale LocalAPI through `AF_UNIX`, finite deadline, actual manager stop/restart and TERM/KILL cancellation including TERM-resistant descendant/cgroup cleanup; fail-closed cold start/restart without private IP | PREDEPLOY / NOT OBSERVED |
+| Network and Apps/VPN | Actual service manager with assembled vendor unit/drop-ins, environment and identity; same-host public/private FD ownership and sockets; missing-IP failed atomic reload retains old public routes/listeners/TLS; explicit reload after IP return; transport-loss/return and listener lifetime behavior | PREDEPLOY / NOT OBSERVED |
+| Apps/VPN | Real auth/token/CONNECT/login paths, named-host/alias precedence, positive origin controls, real TLS and all configured journal/access/error sinks; successful and failing sensitive requests without raw/encoded secret leakage | PREDEPLOY / NOT OBSERVED |
+| Certificate host and each reader | Actual credential `0400` owner/denial, groups and `LoadCredential` delivery; exact reload/restart recipients and renewed certificate consumption; existing certificate/account state adoption | PREDEPLOY / NOT OBSERVED |
+| Network and machine/transport owner | Physical NIC naming and boot order, WAN policy precedence/carrier recovery, bootstrap absolute deadline across reboot/reload and primary transport handoff | PREDEPLOY / NOT OBSERVED |
+| Provider/operator | Production DNS-01 propagation and issuance, live ACME endpoints and DNS credential scope | PREDEPLOY / NOT OBSERVED |
+
+Reuse shared evidence only where behavior is identical. No VM, new system manager
+runner or privilege/isolation workaround is permitted. Provider/DNS, live ACME,
+deploy, backup writer, restore/prune and credential/secret mutations retain their
+separate owner-approval boundaries. Publication and source adoption are distinct
+from these actions; see [release and adoption](release.md).

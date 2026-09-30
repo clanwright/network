@@ -17,8 +17,9 @@ let
     # The fixture has no machine inventory on disk. Give Clan a materialized,
     # isolated directory instead of re-coercing the virtual Git flake root.
     directory = builtins.path {
-      path = root + /tests;
+      path = root + "/tests";
       name = "network-consumer-fixtures";
+      filter = path: type: type == "directory" || builtins.baseNameOf path == "empty-sops.yaml";
     };
     imports = [
       {
@@ -44,7 +45,7 @@ in
   inherit machine;
   inherit (consumer) config;
   valid = builtins.all (a: a.assertion) machine.assertions;
-  evaluated = builtins.deepSeq (builtins.mapAttrs (_: u: u.text) machine.systemd.units) (
-    builtins.seq machine.system.build.toplevel.drvPath true
-  );
+  # Unit rendering proves the selected native integration. Forcing the whole
+  # host closure adds unrelated filesystem/boot/package checks to every case.
+  evaluated = builtins.deepSeq (builtins.mapAttrs (_: u: u.text) machine.systemd.units) true;
 }

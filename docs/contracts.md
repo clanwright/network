@@ -2,124 +2,111 @@
 
 | Owner | Authority |
 | --- | --- |
-| Network | Implementation, defaults, dependency versions, exact Caddy/Lego builds, typed public contracts, technical compatibility checks |
-| Service consumer | Sites and NaiveProxy snippets, structured listeners, certificate claims, certificate renewal notification units, generated route-fragment dependencies |
-| Clanwright core | Machine placement and facts, mandatory profiles, public exposure approval, WAN data and IPv6 policy, encrypted secret values and recipients |
+| Network | Six Clan role interfaces, native extensions, specialized Caddy construction, shared types and technical conflict checks |
+| Host/consumer | Native ACME module and stock Lego, explicit certificate IDs/challenges/readers, sites and proxy/publisher routes, startup dependencies and package qualification |
+| Machine/transport owner | Placement, physical WAN facts, IPv6/exposure policy, private address/interface readiness, transport grants and deployment |
+| Secret owner | Encrypted values, recipients and state adoption; Network references only the named SOPS path |
 
-## Public integration
+Select roles through the catalog listed in the root README. Adjacent service
+READMEs own exact settings and declarations. Importing internal modules or
+replacing Network's Caddy package is unsupported. New settings require a concrete
+consumer need and a Network release. Release and consumer adoption are separate
+transactions described in [release](operations/release.md). Local evidence and
+all PREDEPLOY acceptance requirements have one owner:
+[verification](operations/verify.md).
 
-Select modules through the Network Clan catalog exported by the flake. The root
-README lists names and roles; adjacent service READMEs define their settings.
-Pin an exact released tag and retain its resolved lock. Do not override Network
-packages, import internal modules, or use a consumer overlay to add a hidden
-setting. New needs change the typed interface through a Network release.
+## Certificate identity and readers
 
-The `nixosModules.data-mesher` flake output is an internal compatibility shim for
-the pinned Clan dependency, not a consumer service interface. Clan's input
-follows the declaring Network flake, including when nested under Apps. There is
-no separate relative data-mesher source to resolve or copy into consumers.
-Consumers must be able to generate and update locks normally; an existing valid
-lock or successful standalone evaluation does not prove that acceptance.
+Declare `security.acme.certs.<explicitStableID>` directly. Preserve physical IDs:
+they determine `/var/lib/acme/<id>` and unit names. A wildcard uses a star-free
+ID and native SANs. Renaming changes storage identity; Network does not move or
+adopt state. Changes under an existing ID may still alter issuance.
 
-## Certificates
+Each certificate explicitly selects its native challenge; null host-wide
+challenge defaults ensure that misspelled reader references and reload-only
+implicit entries fail validation. Native scalar/list composition remains native.
+Separate IDs for the same domain need deliberate purpose/account intent.
 
-Consumers contribute `networkCore.acme.certificateClaims`, optional ownership
-records and `networkCore.acme.reloadServices`, keyed by declared certificate name.
-Duplicate ownership is invalid; renewal consumers must reference declared claims.
-The wildcard compatibility role contributes a claim to the same local lifecycle.
+Only Timeweb certificates receive the named SOPS credential and Timeweb IPv4
+unit policy. The credential is `acme:acme`, mode `0400`; certificate group access
+does not grant credential access. Other providers use native credentials. The
+host's ACME/Lego pair owns retries, failure statuses and account handling.
 
-The Certificates role takes an ACME contact email and a named SOPS interface.
-Network declares runtime access and passes only the resolved SOPS path to Lego;
-core supplies encrypted values through its SOPS configuration. No credentials
-belong in examples, Nix strings, logs or this repository's documentation. The
-interface name is configurable; the supported provider and exact Lego package are
-Network-owned. A consumer selecting Certificates must use a native NixOS ACME
-module compatible with Lego 5 for every certificate on that host. The credential is owned by `acme` with mode `0400`; certificate
-readers must not inherit credential access. Root compromise on an issuing host
-can still expose DNS API privileges; this accepted boundary does not claim
-zone isolation. Native NixOS Caddy registers its reload automatically for each `useACMEHost`;
-consumers explicitly register other units. The final notification list is deduplicated
-for Network-owned certificate claims; unrelated native certificates retain their
-notification lists. Derived ownership records are internal read-only results. This contract
-does not transfer encrypted value ownership or authorize secret rotation.
+Certificate consumers declare their exact notification targets and reader access
+as described in the [Certificates reference](../clanServices/certificates/README.md).
+Native `try-reload-or-restart` notification does not prove that a reader consumes
+the renewed certificate. State/account adoption remains host-owned.
 
-## Caddy
+## Native Caddy composition
 
-Consumers contribute `networkCore.caddy.fragments` with structured host/listener,
-certificate and ownership metadata alongside native route text. An empty IPv4
-listener list is a wildcard; normalized host overlaps on overlapping listeners
-are rejected. Forward-proxy capability claims are exclusive on shared listeners
-and require a listener-wide `:443` site address in the assembled declaration.
-A public root (`publicSite = true`) requires exactly one nonempty `siteOwners`
-token. Log paths must be absolute and safe for both Caddy and tmpfiles syntax.
-Network derives directive ordering from the requested capability. Consumers own
-NaiveProxy configuration, authentication and route generation; Caddy does not
-invent them. Referenced certificates must exist. Caddy renewal registration is
-native; other service notifications remain explicit. See the service reference for claim fields and fragment ordering.
+Consumers extend the native canonical site key without redeclaring its base
+owner. The [Caddy reference](../clanServices/caddy/README.md) owns exact native
+settings, listener/root conflicts, ordered route contributions and log policy.
+Advertised endpoint metadata does not select the actual bind address. Consumers
+own CONNECT scope, authentication, token policy, publisher behavior and sensitive
+path logging. Network neither reconstructs nor scans their route text.
 
-## Static sites
+The proxy owner supplies one complete authenticated CONNECT fragment. The
+consumer attaches it once to the explicit listener catch-all root and prepends
+the same full fragment at priority 500 to every effective same-listener named
+site whose canonical host or alias can match a target. Named outer Host routes
+are terminal and precede the root, so root-only ordering and cover TLS SNI cannot
+qualify that path. Keep each named site's owner, listeners, certificate, native
+hostName and ordinary `forwardProxy = false`. Each attachment retains CONNECT
+method and guards on both the actual selected local bind IPv4 and local port
+443, including on mixed public/private listeners. `http.request.local.port` is
+numeric and must compare with `443`. The target authority port is independent. Separate
+listeners require their own declared roots and independently scoped policy.
 
-The static-site role consumes an already-built, immutable Nix static directory.
-The website owns source, dependency pins, build tools and output. The consumer
-selects the artifact, canonical host, aliases, existing certificate, listener,
-placement and public claim identity. Network validates the artifact at build
-time and owns file serving, browser alias redirects and real HTTP 404 responses.
-It does not build the website, fetch content at runtime or provide SPA fallback.
+The transport owner supplies one finite, read-only startup gate through native
+`systemd.services.caddy.serviceConfig.ExecStartPre`. With a private listener and
+no private address, cold start/restart remains fail-closed. There is no per-reload
+gate, watcher, wildcard fallback or transport-loss unit binding. Native failed
+reload preserves the old configuration/listeners/TLS; after the address returns,
+an explicit reload applies changes. Independent public start/reload while the
+configured private address is absent is not a requirement. The
+[verification boundary](operations/verify.md) defines required observation of
+these native transitions.
 
-Each instance emits one Caddy claim through the existing ownership and conflict
-checks. Select the Caddy ingress separately. A public instance supports existing
-NaiveProxy contributions to its explicit claim name; Network does not add proxy
-authentication or routing. A second nonpublic instance can serve the same
-artifact on a secondary host. Nonpublic metadata does not imply network privacy.
+For Tailscale, Access supplies `access.lib.tailscaleReadyGate { pkgs; ipv4;
+interface; }`, an executable derivation usable as a native unit command. Pass
+the selected listener IPv4 and effective `services.tailscale.interfaceName`.
+Consumer `pkgs` selects support tools only; the helper fixes the Access CLI.
+The effective `services.tailscale.package` must equal
+`access.packages.${system}.tailscale`. Attach the helper once to ordinary
+`ExecStartPre`, without `+`/`!` or sandbox relaxation. Actual Caddy-UID access to
+LocalAPI (`AF_UNIX`), interface inspection (`AF_NETLINK`) and cancellation remain
+Access and consuming-unit responsibilities; their acceptance is defined in
+[verification](operations/verify.md).
 
-The consumer must select a certificate covering every served host and redirect
-alias, including secondary instances. Referencing an existing certificate does
-not prove the deployed certificate's SANs. Domain and exposure approval remain
-with the consumer/core. See the [role reference](../clanServices/static-site/README.md)
-for settings and migration.
+## Static artifacts
 
-## Host networking
+The website owns its immutable artifact and build. The role validates it and
+declares the native canonical site, guarded alias redirects and a terminal
+fallback. No SPA fallback or runtime fetch is supplied. Extensions use the same
+canonical key. The consumer declares a certificate covering canonical/alias
+hosts and owns deployment/exposure; selecting an ID does not prove live SANs.
 
-Core supplies actual interface/MAC/address/gateway/table data. DHCP and static
-WAN selections cannot own the same interface or normalized physical MAC. At most one static WAN instance is
-supported per host; it carries every static IPv4 address of that NIC, and addresses
-outside the primary prefix receive source policy routing through their own gateway.
-Externally managed WAN is allowed. Avoid retaining an old native
-interface owner alongside its Network replacement: Network claim validation
-cannot discover every arbitrary external networking implementation.
+## Firewall and WAN
 
-Static WAN readiness waits for its claimed interface through a dedicated unit.
-The consumer retains the global networkd wait-online policy. Network uses one
-canonical IPv4 type for WAN addresses, Caddy listeners and bootstrap SSH.
+One selected Firewall base owns native nftables policy. Destination-specific
+public ports cannot also be opened by host/interface-wide ports or ranges.
+Applications contribute `networking.firewall.privateIngress.<caller>` with an
+explicit IPv4 destination and trusted interfaces. Loopback is implicit. Equal
+normalized declarations compose; conflicting sets fail. The guard drops other
+ingress before native/transport accepts and never grants traffic itself.
+Application HTTP policy and transport grants stay with their owners.
 
-IPv6 is explicit host profile policy. WAN settings may carry that policy, while
-an unset setting preserves existing policy. TCP tuning belongs to the consumer
-VPN domain and is no longer a Network capability.
-Firewall ports compose through native NixOS contributions on the nftables
-backend. Legacy iptables policy is not supported by this candidate.
-Destination-scoped public ports accept traffic for one evaluated host IPv4
-address and leave the native silent drop on the host's other addresses.
-Core owns exposure policy, including selection and lifecycle of the optional bootstrap SSH marker;
-Network neither creates that marker nor implicitly grants public SSH access.
-Applications may contribute typed `networkCore.firewall.privateIngressClaims`
-keyed by caller identity while core selects the Firewall role. Each claim binds
-an explicit private IPv4 destination to trusted incoming interfaces; loopback
-is implicit. Network drops all other ingress to that destination before native
-and Tailscale accepts, across protocols and ports, without adding an accept.
-Identical normalized claims compose; conflicting interface sets for an address
-fail evaluation. Core supplies actual addresses and interfaces and retains
-Tailscale grants and deployment ownership.
-Bootstrap disables password and keyboard-interactive authentication and defaults
-to public-key authentication, preserving an explicit stricter consumer method.
-Rejected markers close the temporary opening and produce a diagnostic; failure
-to apply nftables changes remains an error.
+Bootstrap SSH targets the static primary management IPv4 only. Its trusted marker
+contains an absolute epoch deadline; reload/reboot preserves the remaining
+lifetime. Missing, malformed or expired markers close new connections. Established
+connections retain native conntrack behavior. Creating/renewing the marker and
+the primary-transport handoff are explicit operator actions, never automatic.
 
-Remote private administration requires binding services to the actual Tailscale
-IPv4 address and contributing a `privateIngressClaims` entry that trusts
-`tailscale0` through the selected Network Firewall role. The consumer retains
-Tailscale grants and application HTTP policy, including any `/admin` routing. The former
-`tailnet_only` CGNAT-source snippet is removed: a source range alone does not
-authenticate tailnet membership. Core also owns Tailscale grants/ACL policy.
-Bootstrap deadlines and handoff procedures are specified by the Firewall service
-reference and core operator runbook; applying or rebooting a firewall must not
-renew an expired deadline.
+One static WAN selection owns the primary main default and additional addresses.
+An additional address with its own gateway needs explicit stable `routeTable`
+and `rulePriority`; list order does not allocate identities. Local and earlier
+transport selectors apply first, then non-default main routes, per-source WAN
+default and ordinary main default. Native table/priority/device conflicts are
+checked; arbitrary runtime rules remain transport/consumer-owned. Interface
+readiness is separate from host-wide wait-online policy and Internet reachability.

@@ -1,91 +1,61 @@
 # Static site
 
-Select the `site` role from `@clanwright/network-static-site` and the Caddy
-`ingress` role on the same machine. Each site instance creates one Caddy claim;
-it does not select Caddy, issue a certificate, open a firewall port, or deploy
-content. `useACMEHost` must name an existing Caddy-readable ACME certificate.
-Certificate coverage for the canonical host and every alias belongs to the
-consumer.
+Select `site` from `@clanwright/network-static-site` and Caddy `ingress` on the same
+machine. Each instance owns a native virtual host keyed by canonical `hostName`,
+with the unique owner `static-site:<instanceName>`. It does not select Caddy,
+issue certificates, open ports or deploy content.
 
-Required settings are `claimName`, `hostName`, `artifact`, `useACMEHost`, and
-`listenAddresses`.
-`claimName` is a stable safe identifier for the Caddy claim and
-`/var/log/caddy/<claimName>.log`; it need not match the site's branding.
-`hostName` and each `serverAliases` entry must be a DNS host name. Aliases
-redirect GET and HEAD requests without `Proxy-Authorization` to the canonical
-HTTPS host, retaining path and query. `serverAliases` defaults to `[]`.
+Required settings: `hostName`, `artifact`, `useACMEHost`, `listenAddresses`.
+Optional `serverAliases` defaults to `[]`. Hosts use the shared canonical lowercase
+ASCII DNS type. Caddy rejects alias/self collisions and host overlaps on shared
+listeners. Listeners are an explicit list of canonical IPv4 addresses; `[]` means
+wildcard. Multiple addresses are supported. Private sites require a concrete
+address and consumer firewall policy.
 
-`artifact` is an immutable store-path string whose Nix context retains the
-build dependency (for example, `artifact = "${sitePackage}";`). A bare
-path string or mutable filesystem path is rejected. The site role validates and copies its directory
-before activation. It requires a nonempty readable regular `index.html` and
-accepts an optional nonempty readable regular `404.html`. When absent, the role
-provides a plain `404.html` fallback. Links and unsupported entries are rejected. Missing
-paths retain HTTP 404. No build tooling or runtime fetch is provided.
+`artifact` is an immutable store-path string retaining Nix build context, e.g.
+`artifact = "${websiteArtifact}";`. Mutable paths and bare context-free store
+strings are rejected. Network validates/copies the directory before activation.
+A nonempty readable regular `index.html` is required. Optional `404.html` must
+also be nonempty/readable; otherwise a plain fallback is supplied. Links,
+unsupported entries and unreadable contents fail the build. Missing paths retain
+HTTP 404. No SPA fallback, website build tool or runtime fetch is provided.
 
-For example, a consumer can pass the output of its existing build through Clan
-without losing the Nix dependency:
+Aliases redirect GET/HEAD without `Proxy-Authorization` to canonical HTTPS,
+preserving path/query. File serving and error handling remain host-guarded,
+including when a proxy extension turns the native address into `:443`. Unknown
+hosts do not receive the artifact. The consumer separately declares a certificate
+covering all canonical/alias hosts. `useACMEHost` preserves the explicit physical
+certificate ID; no certificate state is renamed or migrated.
 
 ```nix
-let
-  websiteArtifact = website.lib.buildSite {
-    system = "x86_64-linux";
-    siteUrl = "https://www.example.invalid";
+inventory.instances = {
+  ingress = {
+    module = { input = "network"; name = "@clanwright/network-caddy"; };
+    roles.ingress.machines.edge.settings = { };
   };
-  camouflageArtifact = website.lib.buildSite {
-    system = "x86_64-linux";
-    siteUrl = "https://secondary.example.invalid";
-  };
-in
-{
-  inventory.instances = {
-    ingress = {
-      module = { input = "network"; name = "@clanwright/network-caddy"; };
-      roles.ingress.machines.edge.settings = { };
-    };
-    website = {
-      module = { input = "network"; name = "@clanwright/network-static-site"; };
-      roles.site.machines.edge.settings = {
-        claimName = "website";
-        hostName = "www.example.invalid";
-        serverAliases = [ "example.invalid" ];
-        artifact = "${websiteArtifact}";
-        useACMEHost = "example.invalid";
-        listenAddresses = [ ];
-        publicSite = true;
-      };
-    };
-    camouflage = {
-      module = { input = "network"; name = "@clanwright/network-static-site"; };
-      roles.site.machines.edge.settings = {
-        claimName = "camouflage";
-        hostName = "secondary.example.invalid";
-        artifact = "${camouflageArtifact}";
-        useACMEHost = "example.invalid";
-        listenAddresses = [ ];
-        publicSite = false;
-      };
+  website = {
+    module = { input = "network"; name = "@clanwright/network-static-site"; };
+    roles.site.machines.edge.settings = {
+      hostName = "www.example.invalid";
+      serverAliases = [ "example.invalid" ];
+      artifact = "${websiteArtifact}";
+      useACMEHost = "existing-cert-id";
+      listenAddresses = [ "192.0.2.1" "192.0.2.2" ];
     };
   };
-}
+};
 ```
 
-The example assumes a separately declared certificate covering all listed
-hosts. The two instances may also share one artifact when the content should
-be identical. A proxy consumer selects the stable `website` claim through its
-`selectedPublicSiteClaim` setting. To migrate an existing consumer recipe,
-retain the claim name, replace its raw Caddy site declaration with this role,
-and remove the old declaration. Consumers adopt the role from a released
-Network version; a local checkout is not a release.
+Extensions target `services.caddy.virtualHosts."www.example.invalid"` directly
+without repeating `owner`. A proxy sets `forwardProxy = true` once and contributes
+native `extraConfig = lib.mkBefore ''route { ... }'';`. A publisher uses
+`lib.mkAfter` with its own matcherless outer route. Put host/path/method guards
+inside the literal blocks. Static serving is a terminal fallback at
+`lib.mkOrder 2000`, after the publisher despite its `mkAfter`. The
+[Caddy reference](../caddy/README.md) defines this native order and log policy.
+The alias redirect has normal priority 1000, before the publisher; browser alias
+GET/HEAD still redirect even for a publisher path. Proxy authentication and
+CONNECT remain ahead of that redirect.
 
-`listenAddresses` is required and uses Network's canonical IPv4 type. An
-explicit `[]` means a wildcard listener. `publicSite` defaults to `false`; set it to
-`true` only for a public claim intended as a proxy contribution root. The role
-then derives the owner token `static-site:<instanceName>`. A private site
-requires an appropriate concrete listener and consumer firewall policy.
-
-For a second camouflage host, select a second `site` instance with a distinct
-claim name, its own host and certificate settings, the same artifact, and
-`publicSite = false`. A NaiveProxy consumer attaches through the existing Caddy
-contribution contract to the selected public claim. Static file serving is
-host-matched and follows forward proxy directive ordering.
+A second cover host is a separate instance with its own canonical host,
+certificate/listeners and an immutable artifact, optionally shared.

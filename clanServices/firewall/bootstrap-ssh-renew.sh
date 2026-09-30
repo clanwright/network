@@ -14,6 +14,8 @@ if ! validate_marker_file_and_path; then
   exit 1
 fi
 
+# The shared validator assigns marker_parent before returning success.
+# shellcheck disable=SC2154
 temporary=$(mktemp --tmpdir="$marker_parent" .network-bootstrap-ssh.XXXXXX)
 trap 'rm -f -- "$temporary"' EXIT
 chmod 0600 "$temporary"

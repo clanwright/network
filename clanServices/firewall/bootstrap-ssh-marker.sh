@@ -65,7 +65,9 @@ validate_marker_file_and_path() {
       marker_invalid 'marker path metadata cannot be read'
       return
     fi
-    if (( (8#$directory_mode & 0022) != 0 && (8#$directory_mode & 01000) == 0 )); then
+    if (( (8#$directory_mode & 0022) != 0 )) && {
+      [ "$directory" = "$marker_parent" ] || (( (8#$directory_mode & 01000) == 0 ));
+    }; then
       marker_invalid 'marker path contains a directory writable by non-root without the sticky bit'
       return
     fi

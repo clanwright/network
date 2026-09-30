@@ -1,86 +1,56 @@
 # Release and consumer adoption
 
-Network releases six capabilities, the wildcard compatibility adapter, contracts
-and locked packages together. Breaking public-contract changes require a major
-version; compatible capabilities a minor version; compatible fixes a patch.
-There is no hosted CI, automatic merge or automatic release.
+Network releases its six capabilities, native extensions and specialized Caddy
+build together. Breaking public contracts require a major version. There is no
+hosted CI, automatic merge or release. Local candidates and PREDEPLOY evidence
+are distinct from publication and source adoption.
 
 ## Prepare a candidate
 
-1. Reconcile canonical documentation with the final code and consumer migration.
-2. Run every gate in [verification](verify.md), formatting, Statix and Deadnix on
-   the exact candidate source. Retain readable logs, elapsed time and artifacts.
-3. Obtain independent review and resolve material correctness/security findings.
-4. Inspect the candidate for unintended files and credential material without
-   decrypting or printing secrets. Commit only the reviewed candidate.
-5. Prepare release notes describing behavior, breaking surfaces, validation and
-   required consumer changes. Keep draft notes in the ignored `.work/release/`.
+1. Reconcile canonical documentation and the exact consumer declaration changes.
+2. Run the measured gates in [verification](verify.md) on the exact source.
+   Retain readable evidence and distinguish process proof from deferred behavior.
+3. Obtain independent review and resolve material source findings.
+4. Inspect candidate files without decrypting or printing secrets. Prepare a
+   reviewed commit only within the authorized delivery scope.
+5. Write concise release notes describing supported capabilities, contracts and
+   rationale, with a link to the verification boundary. Temporary notes belong
+   in ignored `.work/release/`.
 
-## Version 4 migration
+## Versioning and consumer contracts
 
-Static WAN replaces `secondaryIPv4`, `routeTableName`, `routeTableId` and
-`rulePriority` with the `additionalIPv4s` list and the `routeTableBase`/
-`rulePriorityBase` settings. Move each former secondary address into the list
-as described in the [static WAN migration](../../clanServices/wan-static/README.md#migration-from-secondaryipv4).
-The default route now names the primary address as preferred source, and
-evaluation rejects a primary gateway outside the primary prefix.
-
-## Version 2 migration
-
-Before adopting version 2, update consumers as follows:
-
-- Assemble `capabilities = [ "forward-proxy" ]` and `siteAddress = ":443"`
-  together. A base Caddy fragment and its contributions may supply the pair
-  separately; the final declaration must be complete.
-- Use canonical absolute Caddy log paths with nonempty path segments containing
-  only letters, digits, `.`, `_`, `+` and `-`; `.` and `..` segments are invalid.
-  Keep certificate ownership in `certificateClaims` and `claimOwners`, and remove
-  any writes to the internal read-only `evaluatedOwners` result.
-- Supply canonical IPv4 addresses for bootstrap SSH, as for WAN and Caddy.
-  Rejected markers now converge closed with a diagnostic and successful refresh;
-  scripts must not use refresh failure as a test for an invalid marker. Genuine
-  nftables errors still fail. Explicit stricter SSH authentication methods are
-  preserved while password and keyboard-interactive authentication remain off.
-- Treat static WAN `waitOnline` settings as interface-specific readiness.
-  Consumers that used them to control host-wide waiting must configure their
-  global `systemd.network.wait-online` policy explicitly.
-- Network deduplicates final renewal notifications only for its own certificate
-  claims. Other native ACME certificates retain their notification lists.
-
-Version 1 already removed Network TCP tuning and `tailnet_only`, required
-nftables and a single owner for public Caddy roots, narrowed WAN validation and
-replaced the empty bootstrap marker with an expiring deadline. Consumers moving
-from version 0 must also move tuning to their VPN domain, bind private admin
-sites to their Tailscale address with interface enforcement, and update
-bootstrap/handoff scripts. IPv4-only and HTTP/1.1+HTTP/2 behavior is retained.
+Use certificates, Caddy extensions, static sites, private ingress and WAN through the
+[consumer contracts](../contracts.md) and the adjacent service READMEs linked
+from the [documentation index](../../README.md). Preserve certificate IDs,
+listener/proxy scope, reader access, bootstrap deadlines and stable route IDs.
+No compatibility adapter or automatic state move is provided.
 
 ## Publish an approved candidate
 
-Publication requires separate owner approval. Run from the Network root with
-an explicit, reviewed tag and notes file; this procedure never creates a GitHub
-repository or overwrites a tag. Set both variables before using the commands.
+Publish within the owner-authorized delivery scope; do not request approval
+again for an already-authorized commit/push/release. From a clean reviewed
+checkout, set an exact stable SemVer tag and reviewed notes file:
 
 ```bash
 set -euo pipefail
 : "${release_tag:?Set the reviewed new SemVer tag}"
 : "${notes_file:?Set the reviewed release notes path}"
+[[ "$release_tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
 test -f "$notes_file"
 test -z "$(git status --porcelain)"
 release_commit="$(git rev-parse HEAD)"
-python3 - "$release_tag" <<'PY'
-import re
-import sys
-assert re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+", sys.argv[1]), "Use an exact stable SemVer tag"
-PY
 ! git show-ref --verify --quiet "refs/tags/$release_tag"
 remote_tags="$(git ls-remote git@github.com:clanwright/network.git "refs/tags/$release_tag" "refs/tags/$release_tag^{}")"
 test -z "$remote_tags"
 gh repo view clanwright/network --json nameWithOwner
 ```
 
-The SSH `ls-remote` must succeed; an authentication/network failure is not proof
-that a tag is absent. Use the existing Keychain-backed `gh` authentication and
-SSH Git transport; do not rotate credentials to bypass a sandbox limitation.
+SSH must succeed; failure is not proof of an absent tag. Use existing
+Keychain-backed GitHub authentication and SSH transport. Do not change credentials
+as a sandbox workaround. Sandboxed Keychain access failure is not token expiry;
+request normal outside-sandbox execution if needed. Preserve existing Git signing
+configuration; verify signatures when signing is enabled. No new signing or PR
+policy is introduced here. The following commands publish the reviewed commit and tag:
 
 ```bash
 git push git@github.com:clanwright/network.git "$release_commit:refs/heads/main"
@@ -90,9 +60,12 @@ gh release create "$release_tag" --repo clanwright/network --verify-tag \
   --title "Network $release_tag" --notes-file "$notes_file"
 ```
 
-Verify both remote views resolve the annotated tag to the reviewed commit:
+Verify remote main, the annotated tag and release resolve to the reviewed commit,
+and the checkout remains clean:
 
 ```bash
+remote_main_commit="$(git ls-remote git@github.com:clanwright/network.git refs/heads/main | awk '{print $1}')"
+test "$remote_main_commit" = "$release_commit"
 remote_tag_commit="$(git ls-remote git@github.com:clanwright/network.git "refs/tags/$release_tag^{}" | awk '{print $1}')"
 release_api_object="$(gh api "repos/clanwright/network/git/ref/tags/$release_tag" --jq '.object.sha')"
 release_api_commit="$(gh api "repos/clanwright/network/git/tags/$release_api_object" --jq '.object.sha')"
@@ -103,36 +76,65 @@ gh release view "$release_tag" --repo clanwright/network \
 test -z "$(git status --porcelain)"
 ```
 
-## Consumer adoption
+## Published-input provenance and consumer adoption
 
-For the nested-input portability fix, Apps must release a version whose own lock
-adopts the new Network release. Consumers then update Apps and their direct
-Network pin together, retaining identical Apps-owned and root Network/Primitives
-sources. Changing only the root Network input leaves an older Apps dependency
-graph in place. Neither manual lock imports nor consumer source overrides are
-migration steps. Acceptance includes clean initial locking, normal updating of
-an existing valid Apps v0.1.0 lock, module evaluation, source convergence and
-byte-identical relocking on the accepted official Nix versions. Local candidate
-snapshots establish compatibility, not published release adoption.
+After publication, perform a fresh native public lock/import using the actual
+verified tag, without a candidate path or input override. Run on both the
+installed Nix and the official stable Nix accepted by the consumer; retain
+versions, resolved revision/NAR identities, lock files, output and timings in
+ignored `.work/`. For example, from the Network checkout:
 
-The Lego 5 package requires a consumer nixpkgs whose native NixOS ACME module
-supports Lego 5 commands and v4 account migration. Update the consumer nixpkgs
-before adopting this package update; updating only the Network input is not
-sufficient. Network rejects generated ACME scripts without migration and
-v5 run support, including unrelated native certificates because they
-share the Lego package. The local renewal gate checks migration of a synthetic
-v4 account layout while preserving its account URL and key identity. It does
-not establish live provider acceptance.
+```bash
+set -euo pipefail
+: "${release_tag:?Set the verified published SemVer tag}"
+: "${nix_bin:?Set installed or accepted official Nix executable}"
+mkdir -p .work/verification
+published_check="$(mktemp -d "$PWD/.work/verification/published-input.XXXXXXXX")"
+cat > "$published_check/flake.nix" <<EOF
+{
+  inputs.network.url = "github:clanwright/network/$release_tag";
+  outputs = { network, ... }: let
+    selected = import (network.outPath + "/checks/consumer.nix") {
+      self = network; inputs = network.inputs; root = network.outPath;
+    } {
+      instances.firewall = {
+        module = { input = "network"; name = "@clanwright/network-firewall"; };
+        roles.host.machines.network-node.settings = { };
+      };
+    };
+  in { public = assert selected.valid && selected.evaluated
+    && selected.machine.networking.firewall.enable; {
+    revision = network.rev; narHash = network.narHash;
+    catalog = builtins.attrNames network.clan.modules;
+    firewall = selected.machine.networking.firewall.enable;
+  }; };
+}
+EOF
+{ time {
+  "$nix_bin" --version
+  "$nix_bin" flake lock "path:$published_check"
+  "$nix_bin" eval --json --no-update-lock-file \
+    --option allow-import-from-derivation false --option builders "" \
+    "path:$published_check#public"
+  cp "$published_check/flake.lock" "$published_check/first.lock"
+  "$nix_bin" flake lock "path:$published_check"
+  cmp "$published_check/first.lock" "$published_check/flake.lock"
+}; } > "$published_check/result.log" 2>&1
+cat "$published_check/result.log"
+```
 
-Adoption follows publication. Pin the verified released tag, retain the resolved
-revision in the consumer lock, migrate the typed settings and remove superseded
-implementation. Compare evaluated behavior, build affected production closures
-and run the consumer review/verification gates before accepting the migration.
+The reported revision must equal the verified release commit. This fresh public
+import and unchanged relock supplement the mandatory local candidate
+fresh/update/relock gates; neither substitutes for the actual consumer's gates.
+An intermediate consumer owns its nested Network pin: a root-only update does
+not migrate that graph. Use ordinary Nix updates for each owner-controlled pin,
+retain resolved sources, prove convergence on accepted Nix versions and run the
+consumer composition/build checks. Do not reconstruct locks or commit local path
+pins or guessed future tags.
 
-A separately prepared consumer worktree may evaluate a local candidate using an
-explicit `--override-input network` for development. Such evidence is a candidate
-compatibility check, not released-tag provenance or completed adoption. Do not
-commit a local path pin or a guessed future tag in place of a verified release.
-
-Publication and consumer source adoption do not authorize host updates, DNS or
-provider operations, live ACME, credential rotation or backup operations.
+Ephemeral composition against an immutable local candidate proves that source
+seam, not released provenance or persistent input/state adoption. Qualify the
+host-native ACME/Lego pair and existing account state separately. Complete the
+[PREDEPLOY matrix](verify.md#predeploy-acceptance) before relying on deployed
+behavior. Publication/input adoption do not authorize host updates, live ACME,
+DNS/provider, secret or backup operations.

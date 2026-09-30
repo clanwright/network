@@ -81,3 +81,6 @@ in
     gate
     ;
 }
+// {
+  timewebcloud-contract = import ./timewebcloud.nix { inherit pkgs; };
+}

@@ -7,12 +7,15 @@ let
   hostAddresses = lib.concatMap (interface: map (address: address.address) interface.ipv4.addresses) (
     lib.attrValues config.networking.interfaces
   );
-  hostWide =
+  staticClaims = lib.filter (claim: claim.mode == "static") config.networking.networkWanClaims;
+  acceptsPort =
+    protocol: port: scope:
+    builtins.elem port scope."allowed${protocol}Ports"
+    || lib.any (range: range.from <= port && port <= range.to) scope."allowed${protocol}PortRanges";
+  contradictory =
     protocol: port:
-    builtins.elem port config.networking.firewall."allowed${protocol}Ports"
-    || lib.any (
-      range: range.from <= port && port <= range.to
-    ) config.networking.firewall."allowed${protocol}PortRanges";
+    acceptsPort protocol port config.networking.firewall
+    || lib.any (acceptsPort protocol port) (lib.attrValues config.networking.firewall.interfaces);
   destinationRule =
     protocol: address: ports:
     lib.optionalString (ports != [ ]) ''
@@ -23,14 +26,26 @@ let
 in
 {
   imports = [
+    ../../lib/platform.nix
+    ../../lib/wan.nix
     ./private-ingress.nix
   ]
-  ++ lib.optional bootstrap.enable (import ./bootstrap-ssh.nix { inherit settings; });
-
+  ++ lib.optional (bootstrap.enable && bootstrap.publicIPv4 != null) (
+    import ./bootstrap-ssh.nix { inherit settings; }
+  );
   assertions = [
+    {
+      assertion = config.networking.firewall.networkBaseOwner;
+      message = "network firewall requires one base owner.";
+    }
     {
       assertion = !bootstrap.enable || bootstrap.publicIPv4 != null;
       message = "network firewall bootstrap SSH requires publicIPv4.";
+    }
+    {
+      assertion =
+        !bootstrap.enable || lib.all (claim: claim.primaryIPv4 == bootstrap.publicIPv4) staticClaims;
+      message = "network firewall bootstrap SSH on a static WAN must use its primary management IPv4, never an additional protocol address.";
     }
     {
       assertion = lib.length (lib.unique destinationAddresses) == lib.length destinationAddresses;
@@ -42,7 +57,6 @@ in
     message = "network firewall public destination ${address} is not configured in networking.interfaces on this host.";
   }) destinationAddresses
   ++ lib.optional (destinations != [ ]) {
-    # A TCP reset from the native reject policy would expose the other addresses.
     assertion = !config.networking.firewall.rejectPackets;
     message = "network firewall public destinations require the native silent drop; disable networking.firewall.rejectPackets.";
   }
@@ -59,8 +73,8 @@ in
         (
           protocol:
           map (port: {
-            assertion = !hostWide protocol port;
-            message = "network firewall public destination ${entry.destinationIPv4} ${protocol} port ${toString port} is also accepted host-wide.";
+            assertion = !contradictory protocol port;
+            message = "network firewall public destination ${entry.destinationIPv4} ${protocol} port ${toString port} is also accepted by a global or interface-wide native port declaration.";
           }) entry."allowed${protocol}Ports"
         )
         [
@@ -68,11 +82,8 @@ in
           "UDP"
         ]
   ) destinations;
-
   networking.nftables = {
     enable = true;
-    # The NixOS table manager emits per-table atomic replacement.  Never flush
-    # runtime tables owned by Tailscale, fail2ban, containers, or an operator.
     flushRuleset = lib.mkForce false;
     tables."nixos-fw".content = lib.mkIf bootstrap.enable (
       lib.mkBefore ''
@@ -82,28 +93,23 @@ in
         }
       ''
     );
-    tables.network-edge-policy =
-      lib.mkIf (settings.rejectHttp || config.networkCore.firewall.privateIngressClaims != { })
-        {
-          family = "inet";
-          content = ''
-            chain input_guard {
-              type filter hook input priority filter - 10; policy accept;
-
-              ${lib.optionalString settings.rejectHttp ''iifname != "lo" tcp dport 80 drop comment "network: reject non-loopback HTTP"''}
-              ${config.networkCore.firewall.privateIngressRules}
-            }
-          '';
-        };
+    tables.network-edge-policy = lib.mkIf settings.rejectHttp {
+      family = "inet";
+      content = ''
+        chain http_guard {
+          type filter hook input priority filter - 10; policy accept;
+          iifname != "lo" tcp dport 80 drop comment "network: reject non-loopback HTTP"
+        }
+      '';
+    };
   };
-
   services.openssh.openFirewall = false;
   networking.firewall = {
+    networkBaseOwner = true;
     enable = true;
     backend = "nftables";
     allowPing = lib.mkForce false;
-    inherit (settings.public) allowedTCPPorts;
-    inherit (settings.public) allowedUDPPorts;
+    inherit (settings.public) allowedTCPPorts allowedUDPPorts;
     inherit (settings) interfaces;
     extraInputRules = lib.mkMerge [
       (lib.mkIf bootstrap.enable (

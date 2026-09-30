@@ -44,29 +44,10 @@ in
     ExecStartPost = [ (lib.getExe refresh) ];
     ExecReload = lib.mkAfter [ (lib.getExe refresh) ];
   };
-  systemd.services.network-bootstrap-ssh-refresh = {
-    description = "Converge the bounded bootstrap SSH nftables timeout";
-    after = [ "nftables.service" ];
-    serviceConfig = {
-      Type = "oneshot";
-      ExecStart = lib.getExe refresh;
-    };
-  };
-
   services.openssh.settings = {
     PasswordAuthentication = lib.mkForce false;
     KbdInteractiveAuthentication = lib.mkForce false;
     AuthenticationMethods = lib.mkDefault "publickey";
   };
 
-  assertions = [
-    {
-      assertion = cfg.durationSeconds > 0 && cfg.durationSeconds <= 3600;
-      message = "network firewall bootstrap SSH duration must be between 1 and 3600 seconds.";
-    }
-    {
-      assertion = lib.hasPrefix "/" cfg.markerPath;
-      message = "network firewall bootstrap SSH markerPath must be absolute.";
-    }
-  ];
 }

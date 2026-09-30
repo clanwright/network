@@ -1,46 +1,45 @@
 # Architecture
 
-Network supplies the implementation, defaults, package versions and contracts
-for six separately selected Clan capabilities. It is a ready-made personal stack
-with Timeweb DNS-01, the Network Caddy build and native NixOS/networkd composition.
-Only x86_64-linux is supported. The optional Darwin formatter does not expand
-that runtime boundary.
+Network supplies six independently selected Clan capabilities. Each capability
+keeps its role interface, native NixOS module, scripts and settings reference in
+one `clanServices/<service>/` directory. `lib/` contains shared address/interface
+types, platform validation and WAN ownership checks. `checks/` owns evaluated
+consumer composition; `tests/` contains bounded process/tool fixtures.
 
-The flake exports Clan modules, exact package builds and local checks. Its locked
-nixpkgs input is the package authority; Clan follows that input. All capabilities
-release together. Consumers select exported Clan roles and typed settings rather
-than importing implementation modules or replacing packages with overlays.
-A missing setting is a proposed Network change and release, not an invitation
-to bypass the contract.
+Native NixOS owns ACME certificate identity, challenge validation, renewal and
+reader notifications. Consumers declare `security.acme.certs` directly. The
+Certificates role supplies the contact/resolver defaults and narrowly attaches
+the Timeweb credential and IPv4 policy to selected Timeweb certificates. The
+host's native ACME module and stock Lego stay together; Network does not replace
+Lego or parse generated scripts to infer compatibility.
 
-Clan's unused data-mesher dependency follows Network itself. The
-`nixosModules.data-mesher` output supplies the existing local compatibility stub;
-it is not another supported service. This avoids a relative flake input, which
-Nix 2.34.7+1 and 2.35.2 resolve against the wrong source when Network is nested
-under a locked intermediate consumer such as Apps. The stub remains part of the
-same Network source, and all external dependency revisions remain unchanged.
+Caddy uses native `services.caddy.virtualHosts`. Network adds canonical host
+validation, one base owner, exclusive forward-proxy identity, listener collision
+checks and its shared runtime/log policy. Native ordered route contributions
+replace a separate fragment registry. Static sites own artifact validation and
+host-guarded serving; website projects own their builds, and consumers own proxy
+authentication, publisher routes, transport readiness and exposure.
 
-Selection is independent: Certificates has no implicit Caddy dependency; Caddy
-needs declared ACME certificates but does not select Certificates or Firewall.
-Static sites generate hosting claims and require a separately selected Caddy
-ingress; they do not select VPN, certificates or exposure policy.
-Firewall does not select Access. WAN may be configured externally. Core profiles
-choose mandatory capabilities and public exposure; Network checks technical
-compatibility. VPN consumers own TCP performance policy; Network does not set congestion control or qdisc defaults.
+The locked nixpkgs input is Network's package authority. Network constructs one
+specialized Caddy with pinned forward-proxy and rate-limit plugins. Consumer
+Caddy overrides are rejected. Other host packages remain native. Clan follows
+Network's nixpkgs input. Its pinned unconditional data-mesher import is satisfied
+by the minimal function-valued empty module in `flake.nix`; it declares no
+service, options or package. The input follows Network itself to avoid a nested
+relative source. Lock generation and convergence have a native Git/Nix check.
 
-Certificates uses one Network-owned Lego 5 package with Timeweb API v2
-on every participating host. Issuance, keys and renewal stay local through native
-NixOS ACME. Caddy owns its base runtime and validation. Static sites own the
-reusable static hosting recipe; website repositories own their builds and
-artifacts. Consumers select those artifacts and may also supply custom site and
-NaiveProxy route fragments. Native nftables firewall and networkd facilities remain the primary host implementation.
-Bootstrap SSH uses a bounded, explicitly renewable deadline; permanent recovery
-transport remains Access-owned. Certificates share read access with consumers,
-while the DNS credential is readable only by the ACME owner. A compromise of
-host root can still obtain the local DNS credential; this residual risk is accepted.
-IPv4-only production and HTTP/1.1+HTTP/2 remain deliberate consumer policies.
-HTTP/3 and TCP performance changes await the VPN review.
+Firewall composes native port policy with destination-specific exposure and a
+private-ingress drop before accepts. Bootstrap SSH is an explicitly created
+absolute deadline enforced by nftables, without polling or session termination.
+Networkd owns WAN addresses and routes; separately routed additional addresses
+carry explicit stable table/rule identities. Native transport selectors and
+non-default main routes retain their agreed precedence.
 
-See [contracts](contracts.md) for authority boundaries and [verification](operations/verify.md)
-for what establishes release readiness. No runtime or provider state is inferred
-from the desired configuration.
+TCP tuning belongs to VPN. Production IPv6 and HTTP/3 require a separate
+consumer/transport decision; Caddy currently retains HTTP/1 and HTTP/2.
+Other DNS providers use host-native ACME declarations and their own credentials.
+
+Only x86_64-linux is supported. Darwin exposes developer tools. There is no VM
+test infrastructure, provider framework, watcher or automatic deployment. Local
+source/build/composition evidence and PREDEPLOY behavior acceptance are separate;
+their exact boundaries live in [verification](operations/verify.md).

@@ -2,37 +2,25 @@ _: _: {
   _class = "clan.service";
   manifest = {
     name = "@clanwright/network-static-site";
-    description = "Serve a validated static artifact through a Caddy claim";
+    description = "Serve a validated static artifact through a native Caddy virtual host";
     readme = builtins.readFile ./README.md;
   };
 
   roles.site = {
     description = "Declare a host-scoped static site on an existing Caddy ingress";
     interface =
-      { lib, ... }:
+      { lib, options, ... }:
       let
         networkTypes = import ../../lib/types.nix { inherit lib; };
-        dnsName = lib.types.addCheck lib.types.str (
-          name:
-          builtins.stringLength name <= 253
-          &&
-            builtins.match "[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*" name
-            != null
-          && builtins.all (label: builtins.stringLength label <= 63) (lib.splitString "." name)
-        );
       in
       {
         options = {
-          claimName = lib.mkOption {
-            type = lib.types.strMatching "[A-Za-z0-9][A-Za-z0-9_-]*";
-            description = "Stable Caddy claim and safe access-log name, independent of branding.";
-          };
           hostName = lib.mkOption {
-            type = dnsName;
-            description = "Canonical DNS host served by the site.";
+            type = networkTypes.dnsName;
+            description = "Canonical lowercase ASCII DNS host and native Caddy virtualHosts key.";
           };
           serverAliases = lib.mkOption {
-            type = lib.types.listOf dnsName;
+            type = lib.types.listOf networkTypes.dnsName;
             default = [ ];
             description = "Additional DNS hosts redirected to the canonical host.";
           };
@@ -49,21 +37,23 @@ _: _: {
             description = "Existing certificate name; this role does not issue certificates.";
           };
           listenAddresses = lib.mkOption {
-            type = lib.types.nullOr (lib.types.listOf networkTypes.ipv4);
-            default = null;
+            type = lib.types.listOf networkTypes.ipv4;
+            # listOf's implicit emptyValue is []; require an actual definition
+            # so only an explicitly supplied [] selects wildcard listeners.
+            apply =
+              addresses:
+              if options.listenAddresses.isDefined then
+                addresses
+              else
+                throw "network-static-site requires explicit listenAddresses; [] means wildcard.";
             description = "IPv4 listeners; an empty list means wildcard.";
-          };
-          publicSite = lib.mkOption {
-            type = lib.types.bool;
-            default = false;
-            description = "Declare this claim as the public root eligible for a proxy contribution.";
           };
         };
       };
     perInstance =
       { instanceName, settings, ... }:
       {
-        nixosModule = import ../../modules/static-site {
+        nixosModule = import ./module.nix {
           inherit instanceName settings;
         };
       };

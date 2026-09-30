@@ -1,4 +1,5 @@
-{ pkgs, ... }: {
+{ pkgs, ... }:
+{
   assertions = [
     {
       assertion = pkgs.stdenv.hostPlatform.system == "x86_64-linux";

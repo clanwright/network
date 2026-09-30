@@ -7,24 +7,19 @@ _: _: {
   };
   roles.host = {
     description = "Enable native wan-dhcp configuration on the host";
-    interface = { lib, ... }: {
-      options = {
-        interface = lib.mkOption { type = lib.types.strMatching "[a-zA-Z0-9_.-]{1,15}"; };
-        macAddress = lib.mkOption { type = lib.types.strMatching "([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}"; };
-        enableIPv6 = lib.mkOption {
-          type = lib.types.nullOr lib.types.bool;
-          default = null;
+    interface =
+      { lib, ... }:
+      let
+        inherit (import ../../lib/types.nix { inherit lib; }) interfaceName;
+      in
+      {
+        options = {
+          interface = lib.mkOption { type = interfaceName; };
+          macAddress = lib.mkOption { type = lib.types.strMatching "([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}"; };
         };
-
       };
-    };
     perInstance = { settings, ... }: {
-      nixosModule = _: {
-        imports = [
-          ../../modules/host/platform.nix
-          (import ../../modules/host/wan-dhcp.nix { inherit settings; })
-        ];
-      };
+      nixosModule = import ./module.nix { inherit settings; };
     };
   };
 }
