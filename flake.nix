@@ -5,9 +5,6 @@
     clan-core = {
       url = "github:clan-lol/clan-core";
       inputs.nixpkgs.follows = "nixpkgs";
-      # Pinned Clan unconditionally imports this unused module. Its empty
-      # export follows this source so nested locking needs no relative input.
-      inputs.data-mesher.follows = "";
     };
   };
   outputs =
@@ -18,8 +15,6 @@
       service = path: nixpkgs.lib.modules.importApply path { inherit self; };
     in
     {
-      # Satisfy the pinned Clan import without declaring a fictitious service.
-      nixosModules.data-mesher = _: { };
       clan.modules = {
         "@clanwright/network-certificates" = service ./clanServices/certificates/default.nix;
         "@clanwright/network-caddy" = service ./clanServices/caddy/default.nix;

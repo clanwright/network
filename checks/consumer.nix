@@ -40,11 +40,20 @@ let
     ];
   };
   machine = consumer.config.nixosConfigurations.network-node.config;
+  # Clan imports its native module; selecting Network must leave it disabled
+  # without contributing the daemon's unit, account or generated configuration.
+  dataMesherDisabled =
+    !machine.services.data-mesher.enable
+    && !(machine.systemd.services ? data-mesher)
+    && !(machine.systemd.units ? "data-mesher.service")
+    && !(builtins.hasAttr machine.services.data-mesher.user machine.users.users)
+    && !(builtins.hasAttr machine.services.data-mesher.group machine.users.groups)
+    && !(builtins.hasAttr "${machine.services.data-mesher.user}/dm.toml" machine.environment.etc);
 in
 {
-  inherit machine;
+  inherit machine dataMesherDisabled;
   inherit (consumer) config;
-  valid = builtins.all (a: a.assertion) machine.assertions;
+  valid = dataMesherDisabled && builtins.all (a: a.assertion) machine.assertions;
   # Unit rendering proves the selected native integration. Forcing the whole
   # host closure adds unrelated filesystem/boot/package checks to every case.
   evaluated = builtins.deepSeq (builtins.mapAttrs (_: u: u.text) machine.systemd.units) true;

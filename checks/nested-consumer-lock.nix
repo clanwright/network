@@ -100,9 +100,18 @@ let
     selected:
     let
       clan = resolve consumer selected "clan-core";
+      dataMesher = resolve consumer clan "data-mesher";
+      source = consumer.nodes.${dataMesher};
     in
-    resolve consumer clan "data-mesher" == selected
-    && resolve consumer clan "nixpkgs" == resolve consumer selected "nixpkgs";
+    dataMesher != selected
+    && source.original.type == "tarball"
+    && source.original.url == "https://git.clan.lol/clan/data-mesher/archive/main.tar.gz"
+    && resolve consumer clan "nixpkgs" == resolve consumer selected "nixpkgs"
+    && builtins.all (name: resolve consumer dataMesher name == resolve consumer clan name) [
+      "nixpkgs"
+      "flake-parts"
+      "treefmt-nix"
+    ];
   # The candidate owns ordinary source pins; no relative path dependency may
   # silently rely on a consumer's directory structure.
   noRelative = builtins.all (
@@ -119,7 +128,7 @@ require
   )
   "direct/wrapper candidate source identity differs"
   (
-    require (follows network && follows nested) "Clan follows do not resolve to Network/nixpkgs" (
+    require (follows network && follows nested) "native Clan data-mesher ownership or follows differ" (
       require noRelative "candidate contains a relative locked source" {
         directDependencies = graph network;
         nestedDependencies = graph nested;

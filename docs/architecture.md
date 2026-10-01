@@ -23,10 +23,11 @@ authentication, publisher routes, transport readiness and exposure.
 The locked nixpkgs input is Network's package authority. Network constructs one
 specialized Caddy with pinned forward-proxy and rate-limit plugins. Consumer
 Caddy overrides are rejected. Other host packages remain native. Clan follows
-Network's nixpkgs input. Its pinned unconditional data-mesher import is satisfied
-by the minimal function-valued empty module in `flake.nix`; it declares no
-service, options or package. The input follows Network itself to avoid a nested
-relative source. Lock generation and convergence have a native Git/Nix check.
+Network's nixpkgs input. Clan owns its native data-mesher dependency and imports
+the upstream module, which defaults to disabled. Network supplies no substitute
+module or package. Consumer checks verify that selecting Network leaves it
+disabled without its unit, user, group or generated configuration. Lock generation
+and convergence have a native Git/Nix check.
 
 Firewall composes native port policy with destination-specific exposure and a
 private-ingress drop before accepts. Bootstrap SSH is an explicitly created

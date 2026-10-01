@@ -60,7 +60,7 @@ write_wrapper() {
   local network_url
   LOCK_URL="git+file://$candidate?rev=$revision"; export LOCK_URL
   network_url=$(nix_string)
-  printf '{ inputs.network.url = %s; outputs = { network, ... }: { public = { revision = network.rev; narHash = network.narHash; source = toString network.outPath; catalog = builtins.attrNames network.clan.modules; dataMesher = builtins.isFunction network.nixosModules.data-mesher; }; }; }\n' "$network_url" >"$wrapper/flake.nix"
+  printf '{ inputs.network.url = %s; outputs = { network, ... }: { public = { revision = network.rev; narHash = network.narHash; source = toString network.outPath; catalog = builtins.attrNames network.clan.modules; dataMesherSource = toString network.inputs.clan-core.inputs.data-mesher.outPath; }; }; }\n' "$network_url" >"$wrapper/flake.nix"
 }
 write_consumer() {
   local network_url wrapper_url
@@ -79,7 +79,7 @@ write_consumer() {
         narHash = network.narHash;
         source = toString network.outPath;
         catalog = builtins.attrNames network.clan.modules;
-        dataMesher = builtins.isFunction network.nixosModules.data-mesher;
+        dataMesherSource = toString network.inputs.clan-core.inputs.data-mesher.outPath;
       };
       selected = import (network.outPath + "/checks/consumer.nix") {
         self = network; inputs = network.inputs; root = network.outPath;
@@ -97,8 +97,9 @@ write_consumer() {
     in {
       public =
         assert direct == wrapper.public;
-        assert direct.catalog == expected && direct.dataMesher;
-        assert selected.valid && selected.evaluated && selected.machine.networking.firewall.enable;
+        assert direct.catalog == expected;
+        assert selected.valid && selected.evaluated && selected.dataMesherDisabled;
+        assert selected.machine.networking.firewall.enable;
         { inherit direct; selectedCapability = "@clanwright/network-firewall"; valid = true; };
     };
 }
