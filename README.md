@@ -1,3 +1,7 @@
+> **Archived.** This module now lives in the Clanwright monorepository as
+> `bricks/network` (https://github.com/ibelyasov/clanwright) and is no longer
+> developed or released here.
+
 # Network
 
 Network is the x86_64-linux networking stack in the public
